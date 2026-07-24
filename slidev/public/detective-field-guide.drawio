@@ -1,0 +1,35 @@
+<mxGraphModel dx="1500" dy="340" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="340" math="0" shadow="0" adaptiveColors="auto">
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+    <mxCell id="title" value="THE SPARK DETECTIVE'S FIELD GUIDE" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=24;fontStyle=1;fontColor=#0F172A;" vertex="1" parent="1">
+      <mxGeometry x="430" y="20" width="640" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="s1" value="&lt;div style=&quot;font-size:14px;color:#2563EB;font-weight:700&quot;&gt;1&lt;/div&gt;&lt;div style=&quot;font-size:22px;font-weight:700&quot;&gt;FIND&lt;/div&gt;&lt;div style=&quot;font-size:13px;color:#64748B&quot;&gt;the right run&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=12;strokeWidth=2;strokeColor=#2563EB;fillColor=#EFF6FF;fontColor=#0F172A;align=center;verticalAlign=middle;spacing=8;" vertex="1" parent="1">
+      <mxGeometry x="40" y="100" width="200" height="125" as="geometry"/>
+    </mxCell>
+    <mxCell id="s2" value="&lt;div style=&quot;font-size:14px;color:#2563EB;font-weight:700&quot;&gt;2&lt;/div&gt;&lt;div style=&quot;font-size:22px;font-weight:700&quot;&gt;CHOOSE&lt;/div&gt;&lt;div style=&quot;font-size:13px;color:#64748B&quot;&gt;live or history&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=12;strokeWidth=2;strokeColor=#2563EB;fillColor=#EFF6FF;fontColor=#0F172A;align=center;verticalAlign=middle;spacing=8;" vertex="1" parent="1">
+      <mxGeometry x="285" y="100" width="200" height="125" as="geometry"/>
+    </mxCell>
+    <mxCell id="s3" value="&lt;div style=&quot;font-size:14px;color:#7C3AED;font-weight:700&quot;&gt;3&lt;/div&gt;&lt;div style=&quot;font-size:22px;font-weight:700&quot;&gt;LOCALIZE&lt;/div&gt;&lt;div style=&quot;font-size:13px;color:#64748B&quot;&gt;the costly stage&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=12;strokeWidth=2;strokeColor=#7C3AED;fillColor=#F5F3FF;fontColor=#0F172A;align=center;verticalAlign=middle;spacing=8;" vertex="1" parent="1">
+      <mxGeometry x="530" y="100" width="200" height="125" as="geometry"/>
+    </mxCell>
+    <mxCell id="s4" value="&lt;div style=&quot;font-size:14px;color:#7C3AED;font-weight:700&quot;&gt;4&lt;/div&gt;&lt;div style=&quot;font-size:22px;font-weight:700&quot;&gt;INSPECT&lt;/div&gt;&lt;div style=&quot;font-size:13px;color:#64748B&quot;&gt;the task shape&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=12;strokeWidth=2;strokeColor=#7C3AED;fillColor=#F5F3FF;fontColor=#0F172A;align=center;verticalAlign=middle;spacing=8;" vertex="1" parent="1">
+      <mxGeometry x="775" y="100" width="200" height="125" as="geometry"/>
+    </mxCell>
+    <mxCell id="s5" value="&lt;div style=&quot;font-size:14px;color:#D97706;font-weight:700&quot;&gt;5&lt;/div&gt;&lt;div style=&quot;font-size:22px;font-weight:700&quot;&gt;CORRELATE&lt;/div&gt;&lt;div style=&quot;font-size:13px;color:#64748B&quot;&gt;plan · executors · logs&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=12;strokeWidth=2;strokeColor=#D97706;fillColor=#FFFBEB;fontColor=#0F172A;align=center;verticalAlign=middle;spacing=8;" vertex="1" parent="1">
+      <mxGeometry x="1020" y="100" width="200" height="125" as="geometry"/>
+    </mxCell>
+    <mxCell id="s6" value="&lt;div style=&quot;font-size:14px;color:#16A34A;font-weight:700&quot;&gt;6&lt;/div&gt;&lt;div style=&quot;font-size:22px;font-weight:700&quot;&gt;TEST&lt;/div&gt;&lt;div style=&quot;font-size:13px;color:#64748B&quot;&gt;one hypothesis&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=12;strokeWidth=2;strokeColor=#16A34A;fillColor=#F0FDF4;fontColor=#0F172A;align=center;verticalAlign=middle;spacing=8;" vertex="1" parent="1">
+      <mxGeometry x="1265" y="100" width="200" height="125" as="geometry"/>
+    </mxCell>
+    <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=3;strokeColor=#94A3B8;" edge="1" parent="1" source="s1" target="s2"><mxGeometry relative="1" as="geometry"/></mxCell>
+    <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=3;strokeColor=#94A3B8;" edge="1" parent="1" source="s2" target="s3"><mxGeometry relative="1" as="geometry"/></mxCell>
+    <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=3;strokeColor=#94A3B8;" edge="1" parent="1" source="s3" target="s4"><mxGeometry relative="1" as="geometry"/></mxCell>
+    <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=3;strokeColor=#94A3B8;" edge="1" parent="1" source="s4" target="s5"><mxGeometry relative="1" as="geometry"/></mxCell>
+    <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=3;strokeColor=#94A3B8;" edge="1" parent="1" source="s5" target="s6"><mxGeometry relative="1" as="geometry"/></mxCell>
+    <mxCell id="tagline" value="One path. Every case." style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=18;fontStyle=2;fontColor=#475569;" vertex="1" parent="1">
+      <mxGeometry x="550" y="260" width="400" height="35" as="geometry"/>
+    </mxCell>
+  </root>
+</mxGraphModel>

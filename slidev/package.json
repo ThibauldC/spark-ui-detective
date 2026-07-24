@@ -1,0 +1,16 @@
+{
+  "name": "spark-ui-slidev-talk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "slidev --open",
+    "build": "slidev build",
+    "export": "slidev export"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@slidev/cli": "latest",
+    "slidev-theme-light-icons": "latest"
+  }
+}
