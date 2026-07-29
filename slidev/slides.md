@@ -98,6 +98,257 @@ The key contrast is random tuning versus evidence-driven diagnosis.
 
 ---
 
+# How Spark work is distributed
+
+<div class="mental-eyebrow text-blue-700">From an action to parallel tasks · the runtime architecture</div>
+
+<div class="architecture-wrap">
+  <div class="architecture-source">
+    <div class="architecture-source-card">
+      <div class="architecture-label">YOU / NOTEBOOK</div>
+      <div class="architecture-code">df.groupBy(<span>"zone"</span>).count()</div>
+      <div class="architecture-action">An action makes Spark do the work.</div>
+    </div>
+    <div class="architecture-arrow source-arrow">→</div>
+  </div>
+
+  <div class="architecture-driver">
+    <div class="driver-kicker">DRIVER NODE</div>
+    <div class="driver-title">Plans &amp; coordinates</div>
+    <div class="driver-stack">
+      <span>Builds the DAG</span>
+      <span>Splits work into stages</span>
+      <span>Schedules tasks</span>
+    </div>
+    <div class="driver-note">The driver sends instructions — not every row of data.</div>
+  </div>
+
+  <div class="architecture-arrow worker-arrow">→</div>
+
+  <div class="architecture-runtime">
+    <div class="runtime-heading">
+      <b>WORKER NODES</b>
+      <span>executors run tasks in parallel</span>
+    </div>
+
+    <div class="runtime-stage">
+      <div class="runtime-stage-label"><b>STAGE 1</b><span>scan + filter</span></div>
+      <div class="node-grid">
+        <div class="node-card">
+          <div class="node-head"><b>Node 1</b><span>Executor</span></div>
+          <div class="task-pills"><i>Task · P0</i><i>Task · P3</i></div>
+        </div>
+        <div class="node-card">
+          <div class="node-head"><b>Node 2</b><span>Executor</span></div>
+          <div class="task-pills"><i>Task · P1</i><i>Task · P4</i></div>
+        </div>
+        <div class="node-card">
+          <div class="node-head"><b>Node 3</b><span>Executor</span></div>
+          <div class="task-pills"><i>Task · P2</i><i>Task · P5</i></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="shuffle-band">
+      <div class="shuffle-arrows">↗ &nbsp; ↘ &nbsp; ↙ &nbsp; ↖</div>
+      <div><b>SHUFFLE</b><span>records move across workers so equal keys meet</span></div>
+      <div class="shuffle-tag">stage boundary</div>
+    </div>
+
+    <div class="runtime-stage stage-two">
+      <div class="runtime-stage-label"><b>STAGE 2</b><span>aggregate + write</span></div>
+      <div class="node-grid">
+        <div class="node-card result"><div class="node-head"><b>Node 1</b><span>Executor</span></div><div class="task-pills"><i>Task · K0</i></div></div>
+        <div class="node-card result"><div class="node-head"><b>Node 2</b><span>Executor</span></div><div class="task-pills"><i>Task · K1</i></div></div>
+        <div class="node-card result"><div class="node-head"><b>Node 3</b><span>Executor</span></div><div class="task-pills"><i>Task · K2</i></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="architecture-takeaway">
+  <span><b>Driver</b> coordinates</span><span>·</span><span><b>Executors</b> process partitions</span><span>·</span><span><b>Shuffle</b> redistributes data between stages</span>
+</div>
+
+<!--
+Before the mental model, give the room a picture of the cluster.
+
+Start at the notebook. An action reaches the driver. The driver builds the DAG, turns it into stages, and schedules one task per input partition. It is the coordinator, not the place where all the rows are processed.
+
+The executors live on worker nodes. In Stage 1, tasks scan different partitions in parallel. The important transition is the shuffle: records are redistributed across workers by key so that the next stage can aggregate each key. Stage 2 then runs on the shuffled partitions.
+
+This is the picture to keep in mind when we say “shuffle”: it is data movement and a stage boundary, not just a line in the SQL plan. The driver coordinates; executors do the data work.
+-->
+
+<style>
+.architecture-wrap {
+  display: grid;
+  grid-template-columns: 13rem 18rem 1.5rem minmax(0, 1fr);
+  gap: 0.8rem;
+  align-items: stretch;
+  margin-top: 1rem;
+}
+.architecture-source {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.9rem;
+}
+.architecture-source-card,
+.architecture-driver,
+.architecture-runtime {
+  border: 1px solid #cbd5e1;
+  border-radius: 1rem;
+  background: #f8fafc;
+}
+.architecture-source-card { padding: 1rem; }
+.architecture-label,
+.driver-kicker,
+.runtime-heading b {
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+.architecture-code {
+  margin-top: 0.8rem;
+  border-radius: 0.55rem;
+  background: white;
+  padding: 0.7rem;
+  color: #334155;
+  font-family: monospace;
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+.architecture-code span { color: #2563eb; }
+.architecture-action {
+  margin-top: 0.8rem;
+  color: #475569;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+.architecture-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+  font-size: 2rem;
+  font-weight: 800;
+}
+.source-arrow { transform: translateX(0.4rem); }
+.architecture-driver {
+  align-self: center;
+  border-color: #2563eb;
+  background: #eff6ff;
+  padding: 1.2rem;
+  color: #1e3a8a;
+}
+.driver-title {
+  margin-top: 0.45rem;
+  font-size: 1.5rem;
+  font-weight: 800;
+}
+.driver-stack {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 1.2rem;
+}
+.driver-stack span {
+  border-radius: 0.55rem;
+  background: white;
+  padding: 0.55rem 0.7rem;
+  color: #334155;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+.driver-note {
+  margin-top: 1.1rem;
+  color: #475569;
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+.architecture-runtime {
+  min-width: 0;
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  padding: 0.9rem;
+}
+.runtime-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+}
+.runtime-heading b { color: #166534; }
+.runtime-heading span {
+  color: #64748b;
+  font-size: 0.72rem;
+}
+.runtime-stage {
+  display: grid;
+  grid-template-columns: 7rem minmax(0, 1fr);
+  gap: 0.7rem;
+  align-items: center;
+}
+.runtime-stage-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  color: #166534;
+}
+.runtime-stage-label b { font-size: 0.8rem; }
+.runtime-stage-label span { color: #64748b; font-size: 0.68rem; }
+.node-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.55rem; }
+.node-card {
+  border: 1px solid #86efac;
+  border-radius: 0.7rem;
+  background: white;
+  padding: 0.6rem;
+}
+.node-card.result { border-color: #c4b5fd; }
+.node-head { display: flex; justify-content: space-between; gap: 0.4rem; color: #334155; font-size: 0.72rem; }
+.node-head span { color: #64748b; font-size: 0.62rem; }
+.task-pills { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.55rem; }
+.task-pills i {
+  border-radius: 0.4rem;
+  background: #dcfce7;
+  padding: 0.3rem 0.4rem;
+  color: #166534;
+  font-size: 0.62rem;
+  font-style: normal;
+  font-weight: 800;
+}
+.result .task-pills i { background: #ede9fe; color: #6d28d9; }
+.shuffle-band {
+  display: grid;
+  grid-template-columns: 1fr 1.7fr auto;
+  align-items: center;
+  gap: 0.7rem;
+  margin: 0.7rem 0;
+  border-top: 2px dashed #f59e0b;
+  border-bottom: 2px dashed #f59e0b;
+  padding: 0.55rem 0;
+  color: #92400e;
+  text-align: center;
+}
+.shuffle-arrows { color: #f59e0b; font-size: 1.25rem; font-weight: 800; white-space: nowrap; }
+.shuffle-band b { display: block; font-size: 0.72rem; letter-spacing: 0.08em; }
+.shuffle-band span { display: block; margin-top: 0.15rem; color: #78716c; font-size: 0.66rem; }
+.shuffle-tag { border-radius: 999px; background: #fef3c7; padding: 0.3rem 0.55rem; color: #92400e; font-size: 0.62rem; font-weight: 800; white-space: nowrap; }
+.architecture-takeaway {
+  display: flex;
+  justify-content: center;
+  gap: 0.7rem;
+  margin-top: 0.9rem;
+  color: #475569;
+  font-size: 1rem;
+}
+.architecture-takeaway b { color: #0f172a; }
+</style>
+
+---
+
 # Spark UI mental model
 
 <div class="mental-eyebrow text-blue-700">1 application &rarr; # jobs &rarr; # stages &rarr; tasks</div>
