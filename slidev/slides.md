@@ -98,22 +98,56 @@ The key contrast is random tuning versus evidence-driven diagnosis.
 
 ---
 
-# Spark UI Mental Model
+# Spark UI mental model
 
-<div class="mt-10 text-3xl leading-relaxed">
-Most Spark diagnosis is about moving from
-<span class="font-bold text-blue-700">application-level symptoms</span>
-to
-<span class="font-bold text-purple-700">stage-level</span>
-and
-<span class="font-bold text-emerald-700">task-level evidence</span>.
+<div class="mental-eyebrow text-blue-700">1 application &rarr; # jobs &rarr; # stages &rarr; tasks</div>
+
+<div class="mental-hierarchy">
+  <div class="hierarchy-topline"><b>APPLICATION</b><span>SparkSession</span></div>
+  <div class="hierarchy-layout">
+    <div class="hierarchy-job">
+      <div class="hierarchy-job-head"><b>JOB</b><span>action: save()</span></div>
+      <div class="hierarchy-stage">
+        <div class="hierarchy-stage-head"><b>STAGE 0</b><span>4 tasks</span></div>
+        <div class="hierarchy-tasks four"><span>task</span><span>task</span><span>task</span><span>task</span></div>
+      </div>
+      <div class="hierarchy-shuffle">↕ &nbsp; shuffle &nbsp; ↕</div>
+      <div class="hierarchy-stage">
+        <div class="hierarchy-stage-head"><b>STAGE 1</b><span>3 tasks</span></div>
+        <div class="hierarchy-tasks three"><span>task</span><span>task</span><span>task</span></div>
+      </div>
+    </div>
+    <div class="hierarchy-other-jobs"><div>JOB</div><div>JOB</div><div>JOB</div></div>
+  </div>
 </div>
 
 <!--
-This is the section 2 transition slide.
-Explain that the audience does not need a full Spark internals course. They need just enough vocabulary to read Spark UI like evidence.
-Frame the hierarchy before introducing individual terms.
+SparkSession spins up one application
+Use the hierarchy to establish the vocabulary before opening individual Spark UI tabs.
+An application can contain multiple jobs. An action triggers a job, a shuffle separates stages, and each stage runs one task per partition.
 -->
+
+---
+
+# Spark UI in practice
+
+<div class="mental-eyebrow text-blue-700">The same hierarchy, in a real Fabric run</div>
+
+<div class="screenshot-placeholder">
+  <div>
+    <div class="text-3xl font-bold text-slate-700">Screenshot goes here</div>
+    <div class="mt-3 text-lg text-slate-500">Replace this panel with a Spark UI screenshot.</div>
+  </div>
+</div>
+
+<!--
+Add the Spark UI screenshot here before moving into the individual tabs.
+Keep this slide as the visual bridge from the mental model to the practical walkthrough.
+-->
+
+<style>
+@import './styles/index.css';
+</style>
 
 ---
 zoom: 0.85

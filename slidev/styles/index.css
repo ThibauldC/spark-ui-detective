@@ -29,6 +29,142 @@
   text-transform: uppercase;
 }
 
+.mental-hierarchy-lead {
+  margin-top: 0.8rem;
+  font-size: 1.35rem;
+  line-height: 1.35;
+}
+
+.mental-hierarchy {
+  margin-top: 1rem;
+  border: 1px solid #bfdbfe;
+  border-radius: 1.25rem;
+  background: #eff6ff;
+  padding: 1rem 1.2rem;
+}
+
+.hierarchy-topline,
+.hierarchy-job-head,
+.hierarchy-stage-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.hierarchy-topline {
+  color: #1d4ed8;
+  font-size: 1.15rem;
+  letter-spacing: 0.04em;
+}
+
+.hierarchy-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 12rem;
+  gap: 1rem;
+  margin-top: 0.7rem;
+}
+
+.hierarchy-job {
+  border: 1px solid #ddd6fe;
+  border-radius: 1rem;
+  background: #f5f3ff;
+  padding: 0.85rem;
+  color: #4c1d95;
+}
+
+.hierarchy-job-head {
+  margin: -0.85rem -0.85rem 0.7rem;
+  border-bottom: 1px solid #ddd6fe;
+  border-radius: 1rem 1rem 0 0;
+  background: #ede9fe;
+  padding: 0.85rem;
+  font-size: 1.15rem;
+}
+
+.hierarchy-job-head span {
+  color: #6d28d9;
+  font-family: monospace;
+  font-size: 0.9em;
+}
+
+.hierarchy-stage {
+  overflow: hidden;
+  border: 1px solid #bbf7d0;
+  border-radius: 0.85rem;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.hierarchy-stage-head {
+  border-bottom: 1px solid #bbf7d0;
+  background: #dcfce7;
+  padding: 0.65rem 0.75rem;
+  font-size: 0.95rem;
+}
+
+.hierarchy-stage-head span {
+  color: #15803d;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.hierarchy-tasks {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.65rem 0.75rem 0.75rem;
+}
+
+.hierarchy-tasks.four { grid-template-columns: repeat(4, 1fr); }
+.hierarchy-tasks.three { grid-template-columns: repeat(3, 1fr); }
+
+.hierarchy-tasks span {
+  border: 1px solid #fde68a;
+  border-radius: 0.55rem;
+  background: #fffbeb;
+  padding: 0.35rem;
+  color: #92400e;
+  text-align: center;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.hierarchy-shuffle {
+  padding: 0.4rem;
+  color: #6d28d9;
+  font-family: monospace;
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.hierarchy-other-jobs {
+  display: grid;
+  align-content: start;
+  gap: 0.75rem;
+}
+
+.hierarchy-other-jobs div {
+  border: 1px solid #ddd6fe;
+  border-radius: 0.85rem;
+  background: #f5f3ff;
+  padding: 1rem;
+  color: #4c1d95;
+  font-size: 1.1rem;
+  font-weight: 800;
+}
+
+.screenshot-placeholder {
+  display: flex;
+  min-height: 27rem;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1.25rem;
+  border: 2px dashed #94a3b8;
+  border-radius: 1.25rem;
+  background: repeating-linear-gradient(135deg, #f8fafc, #f8fafc 0.8rem, #f1f5f9 0.8rem, #f1f5f9 1.6rem);
+  text-align: center;
+}
+
 .mental-grid {
   display: grid;
   grid-template-columns: 0.85fr 1.55fr;
