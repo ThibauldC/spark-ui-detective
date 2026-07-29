@@ -13,7 +13,7 @@ mdc: true
 
 # The Spark detective
 
-## Diagnosing Spark performance in Microsoft Fabric
+## The curious case of the slow Spark job: a detective's toolbox
 
 <div class="mt-10 text-2xl opacity-80">
 Solving the case of the slow Spark job without memorizing every Spark UI tab.
@@ -24,9 +24,8 @@ Placeholder: title visual, Spark UI screenshot, or detective-style Fabric/Spark 
 </div>
 
 <!--
-Open with the framing: this is a practical investigation, not a Spark UI tour.
+This is a practical investigation, not a Spark UI tour.
 Set expectations that the first part of the talk covers the mystery and the mental model needed to read Spark UI evidence.
-Mention that screenshots can be added later once the demo environment or recorded captures are ready.
 -->
 
 ---
@@ -58,6 +57,8 @@ Emphasize that Spark performance problems often do not fail loudly; they leave c
 The audience should feel the common pain: same notebook, same code, very different runtime.
 -->
 
+---
+hide:true
 ---
 
 # We Are Not Memorizing Tabs
@@ -93,56 +94,6 @@ We are here to learn <span class="text-emerald-700">where to look first</span>.
 Make the main promise of the talk explicit: a repeatable debugging workflow.
 This slide prevents the talk from becoming a feature tour of Spark UI.
 The key contrast is random tuning versus evidence-driven diagnosis.
--->
-
----
-
-# Tiny Fabric Orientation
-
-In Fabric, you usually do not start by typing a Spark UI URL.
-
-<div class="mt-8">
-
-| Situation | Use |
-|---|---|
-| The Spark application is still running | **Live Spark UI** |
-| The Spark application completed or failed | **Spark History Server** |
-| You do not know which run to inspect | **Monitor hub / Recent runs** |
-
-</div>
-
-<div class="mt-8 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-slate-500">
-Placeholder: screenshot of Fabric Monitor hub, Recent runs, or notebook run details
-</div>
-
-<!--
-Keep this orientation deliberately short. The goal is just to anchor Spark UI inside the Fabric experience.
-Explain that live Spark UI is for active applications, while History Server is for completed or failed applications.
-If the audience does not know which run is relevant, they should start in Monitor hub or Recent runs before drilling into Spark internals.
--->
-
----
-
-# The First Decision
-
-```mermaid
-flowchart LR
-    A[Fabric Monitor hub<br/>or Recent runs] --> B{Application state?}
-    B -->|Running| C[Live Spark UI]
-    B -->|Completed or failed| D[Spark History Server]
-    B -->|Unknown run| A
-    C --> E[Stage and task evidence]
-    D --> E
-```
-
-<div class="mt-8 text-xl text-center opacity-80">
-Find the run, choose live or post-mortem, then read the Spark evidence.
-</div>
-
-<!--
-Use the diagram to make the Fabric entry path memorable.
-The important point is that Fabric gives the starting point and operational context, while Spark UI and History Server provide detailed execution evidence.
-Transition from here into the mental model: once we reach Spark evidence, we need enough vocabulary to interpret what we see.
 -->
 
 ---
@@ -414,6 +365,55 @@ Use operator metrics to connect an expensive stage to a join, aggregation, scan,
 @import './styles/index.css';
 </style>
 
+---
+
+# Tiny Fabric Orientation
+
+In Fabric, you usually do not start by typing a Spark UI URL.
+
+<div class="mt-8">
+
+| Situation | Use |
+|---|---|
+| The Spark application is still running | **Live Spark UI** |
+| The Spark application completed or failed | **Spark History Server** |
+| You do not know which run to inspect | **Monitor hub / Recent runs** |
+
+</div>
+
+<div class="mt-8 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-slate-500">
+Placeholder: screenshot of Fabric Monitor hub, Recent runs, or notebook run details
+</div>
+
+<!--
+Keep this orientation deliberately short. The goal is just to anchor Spark UI inside the Fabric experience.
+Explain that live Spark UI is for active applications, while History Server is for completed or failed applications.
+If the audience does not know which run is relevant, they should start in Monitor hub or Recent runs before drilling into Spark internals.
+-->
+
+---
+
+# The First Decision
+
+```mermaid
+flowchart LR
+    A[Fabric Monitor hub<br/>or Recent runs] --> B{Application state?}
+    B -->|Running| C[Live Spark UI]
+    B -->|Completed or failed| D[Spark History Server]
+    B -->|Unknown run| A
+    C --> E[Stage and task evidence]
+    D --> E
+```
+
+<div class="mt-8 text-xl text-center opacity-80">
+Find the run, choose live or post-mortem, then read the Spark evidence.
+</div>
+
+<!--
+Use the diagram to make the Fabric entry path memorable.
+The important point is that Fabric gives the starting point and operational context, while Spark UI and History Server provide detailed execution evidence.
+Transition from here into the mental model: once we reach Spark evidence, we need enough vocabulary to interpret what we see.
+-->
 ---
 layout: default
 clicks: 6
