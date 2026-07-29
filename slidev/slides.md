@@ -104,7 +104,7 @@ zoom: 0.85
 
 <div class="mental-eyebrow text-blue-700">A hierarchy of coordination, execution, and data movement</div>
 
-<div class="architecture-tree">
+<div class="architecture-topology">
   <div class="notebook-card">
     <div class="architecture-label">NOTEBOOK / APPLICATION</div>
     <div class="notebook-row">
@@ -114,75 +114,64 @@ zoom: 0.85
     <span class="notebook-caption">An action plugs into the driver.</span>
   </div>
 
-  <div class="tree-arrow">↓ <span>submit</span></div>
+  <div class="topology-arrow">→ <span>submit</span></div>
 
   <div class="architecture-driver">
     <div class="driver-kicker">DRIVER NODE</div>
     <div class="driver-title">Application coordinator</div>
-    <div class="driver-stack">
-      <span><b>DAG</b> builds the plan</span>
-      <span><b>Stages</b> split at shuffles</span>
-      <span><b>Tasks</b> scheduled per partition</span>
-    </div>
-    <div class="driver-note">Coordinates the work; executors process the data.</div>
+    <div class="driver-copy">Plans the work, schedules it, and tracks progress.</div>
+    <div class="driver-note">The driver coordinates; executors process the data.</div>
+  </div>
+</div>
+
+<div class="driver-branch"><span>schedule work to the cluster</span></div>
+
+<div class="workers-area">
+  <div class="workers-heading">
+    <b>WORKER NODES</b>
+    <span>three shown · more can be added</span>
   </div>
 
-  <div class="driver-branch"><span>schedule tasks</span></div>
-
-  <div class="workers-cluster">
-    <div class="cluster-heading">
-      <b>WORKER NODES</b>
-      <span>each node hosts an executor with task slots</span>
-    </div>
-
-    <div class="worker-grid">
-      <div class="worker-node">
-        <div class="worker-heading">
-          <span class="worker-icon"><i></i><i></i><i></i><i></i></span>
-          <span><b>Worker 1</b><small>node-01</small></span>
-        </div>
-        <div class="executor-box">
-          <div class="executor-heading"><b>EXECUTOR</b><span>2 slots</span></div>
-          <div class="slot-row"><span>Task P0</span><span>Task P3</span></div>
-        </div>
+  <div class="worker-grid">
+    <div class="worker-node">
+      <div class="worker-heading">
+        <span class="worker-icon"><i></i><i></i><i></i><i></i></span>
+        <span><b>Worker 1</b><small>node-01</small></span>
       </div>
-      <div class="worker-node">
-        <div class="worker-heading">
-          <span class="worker-icon"><i></i><i></i><i></i><i></i></span>
-          <span><b>Worker 2</b><small>node-02</small></span>
-        </div>
-        <div class="executor-box">
-          <div class="executor-heading"><b>EXECUTOR</b><span>2 slots</span></div>
-          <div class="slot-row"><span>Task P1</span><span>Task P4</span></div>
-        </div>
+      <div class="executor-box">
+        <div class="executor-heading"><b>EXECUTOR</b><span>parallel slots</span></div>
+        <div class="slot-strip"><i></i><i></i><i></i><i></i></div>
       </div>
-      <div class="worker-node">
-        <div class="worker-heading">
-          <span class="worker-icon"><i></i><i></i><i></i><i></i></span>
-          <span><b>Worker 3</b><small>node-03</small></span>
-        </div>
-        <div class="executor-box">
-          <div class="executor-heading"><b>EXECUTOR</b><span>2 slots</span></div>
-          <div class="slot-row"><span>Task P2</span><span>Task P5</span></div>
-        </div>
-      </div>
+      <div class="worker-caption">runs partitions</div>
     </div>
+    <div class="worker-node">
+      <div class="worker-heading">
+        <span class="worker-icon"><i></i><i></i><i></i><i></i></span>
+        <span><b>Worker 2</b><small>node-02</small></span>
+      </div>
+      <div class="executor-box">
+        <div class="executor-heading"><b>EXECUTOR</b><span>parallel slots</span></div>
+        <div class="slot-strip"><i></i><i></i><i></i><i></i></div>
+      </div>
+      <div class="worker-caption">runs partitions</div>
+    </div>
+    <div class="worker-node">
+      <div class="worker-heading">
+        <span class="worker-icon"><i></i><i></i><i></i><i></i></span>
+        <span><b>Worker 3</b><small>node-03</small></span>
+      </div>
+      <div class="executor-box">
+        <div class="executor-heading"><b>EXECUTOR</b><span>parallel slots</span></div>
+        <div class="slot-strip"><i></i><i></i><i></i><i></i></div>
+      </div>
+      <div class="worker-caption">runs partitions</div>
+    </div>
+  </div>
 
-    <div class="shuffle-lane">
-      <div class="shuffle-word">SHUFFLE</div>
-      <div class="shuffle-arrows">↔ &nbsp; ↔ &nbsp; ↔</div>
-      <div class="shuffle-caption">records cross worker boundaries so equal keys meet</div>
-      <span class="shuffle-tag">stage boundary</span>
-    </div>
-
-    <div class="next-stage">
-      <div class="next-stage-label"><b>STAGE 2</b><small>aggregate + write</small></div>
-      <div class="next-stage-tasks">
-        <span><b>Task K0</b><small>partition of keys</small></span>
-        <span><b>Task K1</b><small>partition of keys</small></span>
-        <span><b>Task K2</b><small>partition of keys</small></span>
-      </div>
-    </div>
+  <div class="shuffle-lane">
+    <span class="shuffle-word">SHUFFLE</span>
+    <span class="shuffle-arrows">↔ &nbsp; ↔ &nbsp; ↔</span>
+    <span class="shuffle-caption">data crosses worker boundaries before the next phase</span>
   </div>
 </div>
 
@@ -193,34 +182,32 @@ zoom: 0.85
 <!--
 Before the mental model, give the room a picture of the cluster.
 
-Start at the notebook. An action reaches the driver. The driver builds the DAG, turns it into stages, and schedules one task per input partition. It is the coordinator, not the place where all the rows are processed.
+Start on the left: the notebook submits an action to the driver. The driver is the coordinator. It plans the work, schedules it, and tracks progress; it is not where all the rows are processed.
 
-The executors live on worker nodes. In Stage 1, tasks scan different partitions in parallel. The important transition is the shuffle: records are redistributed across workers by key so that the next stage can aggregate each key. Stage 2 then runs on the shuffled partitions.
+The driver fans work out to multiple worker nodes. Each worker hosts an executor with several parallel slots, so partitions can be processed at the same time. More workers mean more possible parallelism.
 
-This is the picture to keep in mind when we say “shuffle”: it is data movement and a stage boundary, not just a line in the SQL plan. The driver coordinates; executors do the data work.
+The shuffle is the important exception to the simple fan-out picture: records cross worker boundaries so that equal keys meet before the next phase. That data movement is why a shuffle becomes a stage boundary in the Spark UI.
 -->
 
 <style>
-.architecture-tree {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+.architecture-topology {
+  display: grid;
+  grid-template-columns: 18rem 2.5rem minmax(0, 1fr);
+  gap: 0.8rem;
+  align-items: stretch;
   margin-top: 0.8rem;
 }
 .notebook-card,
-.architecture-driver,
-.workers-cluster {
+.architecture-driver {
+  min-height: 8rem;
   border: 1px solid #cbd5e1;
   border-radius: 1rem;
   background: #f8fafc;
-}
-.notebook-card {
-  width: 24rem;
-  padding: 0.8rem 1.1rem;
+  padding: 1rem 1.1rem;
 }
 .architecture-label,
 .driver-kicker,
-.cluster-heading b {
+.workers-heading b {
   color: #64748b;
   font-size: 0.68rem;
   font-weight: 900;
@@ -230,7 +217,7 @@ This is the picture to keep in mind when we say “shuffle”: it is data moveme
   display: flex;
   align-items: center;
   gap: 0.7rem;
-  margin-top: 0.55rem;
+  margin-top: 0.7rem;
   color: #334155;
   font-family: monospace;
   font-size: 0.85rem;
@@ -246,65 +233,51 @@ This is the picture to keep in mind when we say “shuffle”: it is data moveme
   font-family: sans-serif;
   font-size: 1.1rem;
 }
-.notebook-caption {
+.notebook-caption,
+.driver-copy {
   display: block;
-  margin-top: 0.45rem;
+  margin-top: 0.65rem;
   color: #64748b;
   font-size: 0.72rem;
 }
-.tree-arrow {
+.topology-arrow {
   position: relative;
-  height: 1.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: #2563eb;
-  font-size: 1.4rem;
-  line-height: 1;
+  font-size: 1.8rem;
+  font-weight: 800;
 }
-.tree-arrow span {
+.topology-arrow span {
   position: absolute;
-  top: 0.5rem;
-  left: 1.1rem;
+  margin-top: 2.2rem;
   color: #64748b;
   font-size: 0.62rem;
-  white-space: nowrap;
+  font-weight: 500;
 }
 .architecture-driver {
-  width: 30rem;
   border-color: #2563eb;
   background: #eff6ff;
-  padding: 0.85rem 1.2rem;
   color: #1e3a8a;
 }
 .driver-title {
   margin-top: 0.35rem;
-  font-size: 1.35rem;
+  font-size: 1.4rem;
   font-weight: 800;
 }
-.driver-stack {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.45rem;
-  margin-top: 0.7rem;
-}
-.driver-stack span {
-  border-radius: 0.5rem;
-  background: white;
-  padding: 0.45rem 0.5rem;
-  color: #334155;
-  font-size: 0.7rem;
-  line-height: 1.25;
-  text-align: center;
-}
-.driver-stack b { display: block; color: #2563eb; font-size: 0.66rem; }
+.driver-copy { color: #334155; font-size: 0.82rem; }
 .driver-note {
-  margin-top: 0.65rem;
+  margin-top: 0.9rem;
   color: #475569;
   font-size: 0.7rem;
-  text-align: center;
+  font-weight: 700;
 }
 .driver-branch {
   position: relative;
-  width: min(75%, 55rem);
-  height: 2.2rem;
+  width: calc(100% - 22.1rem);
+  height: 2rem;
+  margin-left: 22.1rem;
   border-bottom: 2px solid #93c5fd;
 }
 .driver-branch::before {
@@ -317,40 +290,33 @@ This is the picture to keep in mind when we say “shuffle”: it is data moveme
 }
 .driver-branch span {
   position: absolute;
-  bottom: 0.2rem;
+  bottom: 0.15rem;
   left: 50%;
   transform: translateX(-50%);
   background: white;
   padding: 0 0.5rem;
   color: #64748b;
-  font-size: 0.64rem;
+  font-size: 0.62rem;
   white-space: nowrap;
 }
-.workers-cluster {
-  width: 100%;
-  border-color: #86efac;
-  background: #f0fdf4;
-  padding: 0.75rem 1rem 0.85rem;
+.workers-area {
+  width: calc(100% - 22.1rem);
+  margin-left: 22.1rem;
 }
-.cluster-heading {
+.workers-heading {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  margin-bottom: 0.6rem;
+  margin-bottom: 0.55rem;
 }
-.cluster-heading b { color: #166534; }
-.cluster-heading span { color: #64748b; font-size: 0.7rem; }
-.worker-grid,
-.next-stage-tasks {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.7rem;
-}
+.workers-heading b { color: #166534; }
+.workers-heading span { color: #64748b; font-size: 0.7rem; }
+.worker-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.7rem; }
 .worker-node {
   border: 1px solid #86efac;
-  border-radius: 0.75rem;
-  background: white;
-  padding: 0.65rem;
+  border-radius: 0.85rem;
+  background: #f0fdf4;
+  padding: 0.75rem;
 }
 .worker-heading {
   display: flex;
@@ -359,9 +325,7 @@ This is the picture to keep in mind when we say “shuffle”: it is data moveme
   color: #334155;
   font-size: 0.8rem;
 }
-.worker-heading small,
-.next-stage-label small,
-.next-stage-tasks small {
+.worker-heading small {
   display: block;
   margin-top: 0.15rem;
   color: #64748b;
@@ -383,11 +347,11 @@ This is the picture to keep in mind when we say “shuffle”: it is data moveme
   background: #16a34a;
 }
 .executor-box {
-  margin-top: 0.6rem;
-  border: 1px solid #d1fae5;
-  border-radius: 0.55rem;
-  background: #f8fafc;
-  padding: 0.5rem;
+  margin-top: 0.7rem;
+  border: 1px solid #bbf7d0;
+  border-radius: 0.6rem;
+  background: white;
+  padding: 0.55rem;
 }
 .executor-heading {
   display: flex;
@@ -397,56 +361,37 @@ This is the picture to keep in mind when we say “shuffle”: it is data moveme
   letter-spacing: 0.08em;
 }
 .executor-heading span { color: #64748b; letter-spacing: 0; }
-.slot-row { display: flex; gap: 0.35rem; margin-top: 0.45rem; }
-.slot-row span {
-  flex: 1;
-  border-radius: 0.35rem;
-  background: #dcfce7;
-  padding: 0.35rem 0.2rem;
-  color: #166534;
-  font-size: 0.62rem;
-  font-weight: 800;
+.slot-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.3rem;
+  margin-top: 0.55rem;
+}
+.slot-strip i {
+  height: 0.65rem;
+  border-radius: 999px;
+  background: #4ade80;
+}
+.worker-caption {
+  margin-top: 0.55rem;
+  color: #64748b;
+  font-size: 0.68rem;
   text-align: center;
 }
 .shuffle-lane {
   display: grid;
-  grid-template-columns: auto auto 1fr auto;
+  grid-template-columns: auto auto 1fr;
   align-items: center;
   gap: 0.7rem;
-  margin: 0.65rem 0;
+  margin-top: 0.75rem;
   border-top: 2px dashed #f59e0b;
   border-bottom: 2px dashed #f59e0b;
-  padding: 0.45rem 0.6rem;
+  padding: 0.5rem 0.6rem;
   color: #92400e;
 }
 .shuffle-word { font-size: 0.7rem; font-weight: 900; letter-spacing: 0.1em; }
 .shuffle-arrows { color: #f59e0b; font-size: 1.15rem; font-weight: 800; white-space: nowrap; }
 .shuffle-caption { color: #78716c; font-size: 0.68rem; }
-.shuffle-tag {
-  border-radius: 999px;
-  background: #fef3c7;
-  padding: 0.28rem 0.5rem;
-  color: #92400e;
-  font-size: 0.6rem;
-  font-weight: 800;
-  white-space: nowrap;
-}
-.next-stage {
-  display: grid;
-  grid-template-columns: 7.5rem minmax(0, 1fr);
-  gap: 0.7rem;
-  align-items: center;
-}
-.next-stage-label { color: #6d28d9; font-size: 0.75rem; }
-.next-stage-tasks span {
-  border: 1px solid #c4b5fd;
-  border-radius: 0.55rem;
-  background: #faf5ff;
-  padding: 0.45rem 0.55rem;
-  color: #6d28d9;
-  font-size: 0.68rem;
-  text-align: center;
-}
 .architecture-takeaway {
   display: flex;
   justify-content: center;
