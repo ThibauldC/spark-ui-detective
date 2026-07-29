@@ -1,0 +1,272 @@
+.metric-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 1rem;
+  padding: 1.5rem;
+  background: #f8fafc;
+}
+
+.metric-card.suspect {
+  background: #fff1f2;
+  border-color: #fecdd3;
+}
+
+.metric {
+  font-size: 3rem;
+  line-height: 1;
+  font-weight: 800;
+}
+
+.label {
+  margin-top: 0.75rem;
+  color: #64748b;
+}
+
+.mental-eyebrow {
+  margin-top: -0.45rem;
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.mental-grid {
+  display: grid;
+  grid-template-columns: 0.85fr 1.55fr;
+  gap: 2rem;
+  align-items: stretch;
+  margin-top: 1.2rem;
+}
+
+.mental-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding-top: 0.25rem;
+}
+
+.mental-kicker {
+  font-size: 0.8rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.mental-definition {
+  color: #0f172a;
+  font-size: 1.8rem;
+  line-height: 1.2;
+}
+
+.mental-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 0.85rem;
+  color: #475569;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.mental-detail b {
+  color: #64748b;
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.mental-detail code {
+  border-radius: 0.3rem;
+  background: #f1f5f9;
+  padding: 0.1rem 0.3rem;
+  color: #0f172a;
+  font-size: 0.88em;
+}
+
+.mental-panel {
+  overflow: hidden;
+  align-self: center;
+  min-height: 25rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 1rem;
+  background: white;
+}
+
+.mental-panel-title {
+  background: #f1f5f9;
+  padding: 0.9rem 1.1rem;
+  color: #475569;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.mental-row {
+  display: grid;
+  align-items: center;
+  border-top: 1px solid #e2e8f0;
+  padding: 1rem 1.1rem;
+  color: #334155;
+}
+
+.mental-row.header {
+  border-top: 0;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 0.8rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.job-table .mental-row { grid-template-columns: 0.45fr 2.25fr 0.9fr 1fr; }
+.task-table .mental-row { grid-template-columns: 0.9fr 0.65fr 2fr 0.8fr; }
+.executor-table .mental-row { grid-template-columns: 1fr 1.2fr 1.2fr 1.2fr; }
+
+.focus-blue { border-left: 0.35rem solid #2563eb; background: #eff6ff; color: #1e3a8a; }
+.focus-violet { border-left: 0.35rem solid #7c3aed; background: #f5f3ff; color: #4c1d95; }
+.focus-rose { border-left: 0.35rem solid #f43f5e; background: #fff1f2; color: #9f1239; }
+.focus-emerald { border-left: 0.35rem solid #16a34a; background: #f0fdf4; color: #166534; }
+
+.stage-flow {
+  display: grid;
+  grid-template-columns: 1fr 6.5rem 1fr;
+  gap: 0.8rem;
+  align-items: center;
+  min-height: 21rem;
+  padding: 1.3rem;
+  background: #f8fafc;
+}
+
+.mental-stage-card {
+  overflow: hidden;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.85rem;
+  background: white;
+}
+
+.stage-card-head {
+  display: flex;
+  justify-content: space-between;
+  background: #f1f5f9;
+  padding: 0.85rem;
+  color: #334155;
+}
+
+.stage-card-head span {
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.stage-op {
+  border-top: 1px solid #e2e8f0;
+  padding: 0.85rem;
+  color: #475569;
+  font-family: monospace;
+  font-size: 0.83rem;
+}
+
+.shuffle-boundary {
+  color: #6d28d9;
+  text-align: center;
+}
+
+.shuffle-lines {
+  font-size: 3.5rem;
+  line-height: 1;
+}
+
+.shuffle-boundary b,
+.shuffle-boundary small { display: block; }
+.shuffle-boundary b { font-size: 0.72rem; letter-spacing: 0.1em; }
+.shuffle-boundary small { margin-top: 0.2rem; color: #64748b; }
+
+.task-table .mental-row span:nth-child(3) {
+  display: block;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+
+.task-table .mental-row.header span:nth-child(3) {
+  height: auto;
+  background: transparent;
+}
+
+.task-table .mental-row i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: #60a5fa;
+}
+
+.task-table .focus-rose i { background: #f43f5e; }
+
+.slots { font-size: 0.9rem; letter-spacing: 0.1rem; }
+.slots.idle { color: #cbd5e1; }
+.slots.busy { color: #22c55e; }
+.slots.mixed { color: #22c55e; background: linear-gradient(90deg, currentColor 0 75%, #cbd5e1 75%); background-clip: text; color: transparent; }
+.slots.mixed.two { background: linear-gradient(90deg, #22c55e 0 50%, #cbd5e1 50%); background-clip: text; }
+
+.plan-panel { min-height: 26rem; }
+
+.mental-plan {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1rem 1.2rem 1.2rem;
+  background: #f8fafc;
+}
+
+.mental-plan-node {
+  min-width: 14rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.7rem;
+  background: white;
+  padding: 0.65rem 1rem;
+  color: #334155;
+  text-align: center;
+  font-family: monospace;
+  font-weight: 700;
+}
+
+.mental-plan-node small {
+  display: block;
+  margin-top: 0.2rem;
+  color: #64748b;
+  font-family: sans-serif;
+  font-size: 0.66rem;
+  font-weight: 500;
+}
+
+.mental-plan-node.exchange {
+  border-color: #f59e0b;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.mental-plan-node.compact {
+  min-width: 11.5rem;
+  padding: 0.45rem 0.7rem;
+  font-size: 0.78rem;
+}
+
+.plan-line {
+  width: 1px;
+  height: 0.65rem;
+  background: #94a3b8;
+}
+
+.plan-branches {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2.4rem;
+}
+
+.plan-branch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}

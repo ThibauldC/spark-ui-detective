@@ -3,3 +3,4 @@ dist/
 *.pdf
 *.pptx
 .DS_Store
+*.html

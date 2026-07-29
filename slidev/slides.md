@@ -168,236 +168,250 @@ Frame the hierarchy before introducing individual terms.
 zoom: 0.85
 ---
 
-# Execution Hierarchy
+# Job
 
-```mermaid
-flowchart TB
-    A[Application<br/>one Spark run/session] --> B[Job<br/>triggered by an action]
-    B --> C[Stage<br/>split around shuffle boundaries]
-    C --> D[Task<br/>work for one partition]
-    D --> E[Executor<br/>worker process running tasks]
-```
+<div class="mental-eyebrow text-blue-700">Concept 1 of 5 · the unit that gets triggered</div>
 
-<div class="mt-8 grid grid-cols-2 gap-4">
-  <div class="mini-card"><b>Application</b><br/>The run you investigate</div>
-  <div class="mini-card"><b>Job</b><br/>Created by an action</div>
-  <div class="mini-card"><b>Stage</b><br/>Where expensive work localizes</div>
-  <div class="mini-card"><b>Task</b><br/>Where imbalance becomes visible</div>
+<div class="mental-grid">
+  <div class="mental-copy">
+    <div class="mental-kicker text-blue-700">A job is…</div>
+    <div class="mental-definition">One <b>user action</b> or <b>SQL execution</b>—the thing you asked Spark to do.</div>
+    <div class="mental-detail">
+      <b>Where it lives in the UI</b>
+      <span>The <code>Jobs</code> tab: one row per action, with its trigger, duration, stages, and tasks.</span>
+    </div>
+    <div class="mental-detail">
+      <b>Triggered by</b>
+      <span><code>count()</code> · <code>collect()</code> · <code>write…</code> · <code>show()</code> · a SQL query</span>
+    </div>
+  </div>
+  <div class="mental-panel job-table">
+    <div class="mental-panel-title">Completed Jobs (4)</div>
+    <div class="mental-row header"><span>Id</span><span>Description</span><span>Duration</span><span>Tasks</span></div>
+    <div class="mental-row"><span>9</span><span>show at console:24</span><span>0.4 s</span><span>1 / 1</span></div>
+    <div class="mental-row"><span>8</span><span>count at orders.scala:38</span><span>2.1 s</span><span>208 / 208</span></div>
+    <div class="mental-row focus-blue"><span><b>7</b></span><span><b>parquet at writer.scala:91</b></span><span><b>1m 12s</b></span><span>812 / 812</span></div>
+    <div class="mental-row"><span>6</span><span>collect at repl.scala:11</span><span>0.8 s</span><span>4 / 4</span></div>
+  </div>
 </div>
 
 <!--
-Walk top to bottom slowly. An application can contain multiple jobs. Jobs break into stages. Stages contain tasks.
-Stress that most practical debugging narrows down the hierarchy: first the run, then the job or stage, then the task distribution.
-Mention executors only as the workers that run tasks; avoid cluster-manager details.
--->
+A job is the unit Spark creates when an action asks it to produce a result. Transformations remain lazy; actions such as count, collect, show, or write trigger work.
 
----
+In the Jobs tab, one row represents that request. A single application can contain many jobs, and one SQL execution can create more than one job.
 
-# Shuffle Creates Investigation Boundaries
-
-```mermaid
-flowchart LR
-    A[Read data] --> B[Map/filter]
-    B --> C{Shuffle}
-    C --> D[Join or aggregate]
-    D --> E{Shuffle}
-    E --> F[Write result]
-
-    subgraph S1[Stage 1]
-      A
-      B
-    end
-    subgraph S2[Stage 2]
-      D
-    end
-    subgraph S3[Stage 3]
-      F
-    end
-```
-
-<div class="mt-8 rounded-2xl bg-amber-50 border border-amber-100 p-6 text-xl">
-Shuffle is often where performance mysteries begin: data moves, waits, spills, or concentrates on a few tasks.
-</div>
-
-<!--
-Explain that stages are commonly split around shuffle boundaries.
-Keep this conceptual rather than deep internals. The audience should remember that joins, aggregations, and repartitions often create the expensive boundaries they will inspect later.
-Use this to prepare them for why stage-level sorting by duration and shuffle metrics matters.
--->
-
----
-
-# Task Distribution Matters
-
-<div class="grid grid-cols-2 gap-8 mt-8">
-<div>
-
-## Healthy Pattern
-
-<div class="bars">
-  <span style="height: 66%"></span>
-  <span style="height: 70%"></span>
-  <span style="height: 62%"></span>
-  <span style="height: 68%"></span>
-  <span style="height: 65%"></span>
-</div>
-
-Tasks finish in roughly the same range.
-
-</div>
-<div>
-
-## Suspicious Pattern
-
-<div class="bars suspect-bars">
-  <span style="height: 26%"></span>
-  <span style="height: 31%"></span>
-  <span style="height: 22%"></span>
-  <span style="height: 28%"></span>
-  <span style="height: 92%"></span>
-</div>
-
-A few tasks dominate the stage duration.
-
-</div>
-</div>
-
-<div class="mt-8 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-slate-500">
-Placeholder: Spark UI task duration distribution screenshot
-</div>
-
-<!--
-This slide introduces the diagnostic power of task-level evidence.
-Explain that job progress can hide the real issue: 199 tasks can finish quickly while one task keeps the stage alive.
-Preview common clues without going into cases yet: long tails, shuffle read differences, spill, scheduler delay, GC time, and failed or retried tasks.
--->
-
----
-
-# The SQL Plan Explains the Work
-
-<div class="grid grid-cols-2 gap-8 mt-8">
-<div>
-
-## Spark UI Shows
-
-- Which stage is expensive
-- Whether tasks are balanced
-- Shuffle, spill, wait, and retry signals
-- Executor-level symptoms
-
-</div>
-<div>
-
-## SQL Plan Explains
-
-- Why Spark made that stage
-- Which join or aggregation is involved
-- Where exchanges and shuffles happen
-- Whether the physical plan matches expectations
-
-</div>
-</div>
-
-<div class="mt-8 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-slate-500">
-Placeholder: Spark SQL tab or physical plan screenshot
-</div>
-
-<!--
-Position the SQL plan as the bridge from symptom to cause.
-Spark UI metrics tell us what hurts, but the SQL plan often explains why Spark is doing that physical work.
-Do not teach plan reading in depth here; just establish that the SQL tab will become part of the investigation workflow.
--->
-
----
-
-# Ready To Investigate
-
-<div class="mt-10 text-2xl leading-relaxed">
-The mental model is enough to start following the clues:
-</div>
-
-<div class="mt-8 grid grid-cols-5 gap-3 text-center">
-  <div class="path-card">Run</div>
-  <div class="path-card">Stage</div>
-  <div class="path-card">Task</div>
-  <div class="path-card">Executor</div>
-  <div class="path-card">Plan</div>
-</div>
-
-<div class="mt-12 text-3xl font-semibold text-center">
-Do not guess. Follow the clues.
-</div>
-
-<!--
-Close the sections 1 and 2 deck with a transition into the rest of the talk.
-Recap the minimum workflow introduced so far: start in Fabric, choose live Spark UI or History Server, then reason from application symptoms down to stages and tasks.
-This is a natural handoff to section 3, which can explain what Fabric adds in more depth.
+Use the description to connect the row back to notebook code, then open the job to see the stages Spark needed.
 -->
 
 <style>
-.metric-card {
-  border: 1px solid #e2e8f0;
-  border-radius: 1rem;
-  padding: 1.5rem;
-  background: #f8fafc;
-}
+@import './styles/index.css';
+</style>
 
-.metric-card.suspect {
-  background: #fff1f2;
-  border-color: #fecdd3;
-}
+---
+zoom: 0.85
+---
 
-.metric {
-  font-size: 3rem;
-  line-height: 1;
-  font-weight: 800;
-}
+# Stage
 
-.label {
-  margin-top: 0.75rem;
-  color: #64748b;
-}
+<div class="mental-eyebrow text-violet-700">Concept 2 of 5 · the boundary that matters</div>
 
-.mini-card,
-.path-card {
-  border: 1px solid #e2e8f0;
-  border-radius: 1rem;
-  background: #f8fafc;
-  padding: 1rem;
-}
+<div class="mental-grid">
+  <div class="mental-copy">
+    <div class="mental-kicker text-violet-700">A stage is…</div>
+    <div class="mental-definition">A run of work Spark can do <b>without moving data</b>. A <b>shuffle</b> creates the next stage.</div>
+    <div class="mental-detail">
+      <b>The rule</b>
+      <span><code>groupBy</code>, <code>join</code>, <code>repartition</code>, and windows often create a shuffle—and therefore a stage boundary.</span>
+    </div>
+    <div class="mental-detail">
+      <b>Where it lives in the UI</b>
+      <span>The <code>Stages</code> tab, or the DAG visualisation inside a job.</span>
+    </div>
+  </div>
+  <div class="mental-panel">
+    <div class="mental-panel-title">DAG · Job 7</div>
+    <div class="stage-flow">
+      <div class="mental-stage-card">
+        <div class="stage-card-head"><b>Stage 12</b><span>200 tasks</span></div>
+        <div class="stage-op">Scan parquet [orders]</div>
+        <div class="stage-op">Filter status = paid</div>
+        <div class="stage-op">HashAggregate (partial)</div>
+      </div>
+      <div class="shuffle-boundary">
+        <div class="shuffle-lines">⇄</div>
+        <b>SHUFFLE</b>
+        <small>data moves</small>
+      </div>
+      <div class="mental-stage-card">
+        <div class="stage-card-head"><b>Stage 13</b><span>200 tasks</span></div>
+        <div class="stage-op">HashAggregate (final)</div>
+        <div class="stage-op">Sort</div>
+        <div class="stage-op">WriteFiles</div>
+      </div>
+    </div>
+  </div>
+</div>
 
-.path-card {
-  font-size: 1.3rem;
-  font-weight: 700;
-}
+<!--
+A stage groups operations that Spark can pipeline without redistributing data. The important boundary is the shuffle.
 
-.bars {
-  height: 12rem;
-  display: flex;
-  align-items: end;
-  gap: 0.7rem;
-  padding: 1rem;
-  border-radius: 1rem;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  margin-bottom: 1rem;
-}
+Here Spark scans, filters, and performs a partial aggregation in Stage 12. The shuffle redistributes records by key. Stage 13 can then finish the aggregation and write the result.
 
-.bars span {
-  flex: 1;
-  display: block;
-  border-radius: 0.5rem 0.5rem 0 0;
-  background: #22c55e;
-}
+That is why joins, aggregations, repartitioning, and windows matter during an investigation: they often create the boundaries where data moves, waits, or spills.
+-->
 
-.suspect-bars span {
-  background: #60a5fa;
-}
+<style>
+@import './styles/index.css';
+</style>
 
-.suspect-bars span:last-child {
-  background: #f43f5e;
-}
+---
+zoom: 0.85
+---
+
+# Task
+
+<div class="mental-eyebrow text-rose-700">Concept 3 of 5 · the atom of execution</div>
+
+<div class="mental-grid">
+  <div class="mental-copy">
+    <div class="mental-kicker text-rose-700">A task is…</div>
+    <div class="mental-definition"><b>One partition’s</b> unit of work within a stage.</div>
+    <div class="mental-detail">
+      <b>The relationship</b>
+      <span><code>tasks per stage</code> = <code>partitions in that stage</code>. The tasks run the same code on different data.</span>
+    </div>
+    <div class="mental-detail">
+      <b>Where it lives in the UI</b>
+      <span>Stage detail → task table and timeline. Skew, slow tasks, GC, and spill become visible here.</span>
+    </div>
+  </div>
+  <div class="mental-panel task-table">
+    <div class="mental-panel-title">Stage 12 · 6 of 200 tasks shown</div>
+    <div class="mental-row header"><span>Partition</span><span>Task</span><span>Duration</span><span>Time</span></div>
+    <div class="mental-row"><span>P0</span><span>0</span><span><i style="width:18%"></i></span><span>0.41 s</span></div>
+    <div class="mental-row"><span>P1</span><span>1</span><span><i style="width:20%"></i></span><span>0.47 s</span></div>
+    <div class="mental-row focus-rose"><span><b>P2</b></span><span><b>2</b></span><span><i style="width:100%"></i></span><span><b>8.2 s</b></span></div>
+    <div class="mental-row"><span>P3</span><span>3</span><span><i style="width:17%"></i></span><span>0.39 s</span></div>
+    <div class="mental-row"><span>P4</span><span>4</span><span><i style="width:19%"></i></span><span>0.44 s</span></div>
+    <div class="mental-row"><span>P5</span><span>5</span><span><i style="width:19%"></i></span><span>0.45 s</span></div>
+  </div>
+</div>
+
+<!--
+A task is the same stage logic applied to one partition. Two hundred partitions produce two hundred tasks for that stage.
+
+That relationship makes the task table diagnostic. Most tasks here finish in under half a second, but Task 2 takes more than eight seconds. The stage cannot finish until its slowest task does.
+
+Job-level progress hides this shape. Stage detail reveals skew, stragglers, spill, GC, retries, and shuffle fetch wait at the level where they happen.
+-->
+
+<style>
+@import './styles/index.css';
+</style>
+
+---
+zoom: 0.85
+---
+
+# Executor
+
+<div class="mental-eyebrow text-emerald-700">Concept 4 of 5 · where the work runs</div>
+
+<div class="mental-grid">
+  <div class="mental-copy">
+    <div class="mental-kicker text-emerald-700">An executor is…</div>
+    <div class="mental-definition">A worker <b>JVM process</b> that runs tasks in parallel slots and holds cached data.</div>
+    <div class="mental-detail">
+      <b>The math</b>
+      <span><code>parallel tasks</code> ≈ <code>executors × cores</code>. With 12 cores available, only about 12 tasks run at once.</span>
+    </div>
+    <div class="mental-detail">
+      <b>Where it lives in the UI</b>
+      <span>The <code>Executors</code> tab: active tasks, memory, GC time, shuffle, and executor logs.</span>
+    </div>
+  </div>
+  <div class="mental-panel executor-table">
+    <div class="mental-panel-title">Active Executors</div>
+    <div class="mental-row header"><span>Executor</span><span>Host</span><span>Slots</span><span>Memory</span></div>
+    <div class="mental-row"><span>driver</span><span>node-00</span><span class="slots idle">● ● ● ●</span><span>1.1 GB</span></div>
+    <div class="mental-row focus-emerald"><span><b>exec-01</b></span><span>node-01</span><span class="slots busy">● ● ● ●</span><span>5.8 / 8 GB</span></div>
+    <div class="mental-row"><span>exec-02</span><span>node-02</span><span class="slots mixed">● ● ● ●</span><span>4.2 / 8 GB</span></div>
+    <div class="mental-row"><span>exec-03</span><span>node-03</span><span class="slots busy">● ● ● ●</span><span>6.1 / 8 GB</span></div>
+    <div class="mental-row"><span>exec-04</span><span>node-04</span><span class="slots mixed two">● ● ● ●</span><span>3.7 / 8 GB</span></div>
+    <div class="mental-row"><span>exec-05</span><span>node-05</span><span class="slots busy">● ● ● ●</span><span>6.4 / 8 GB</span></div>
+  </div>
+</div>
+
+<!--
+Executors are the worker processes that perform tasks. Their cores determine how many tasks can run concurrently; the rest wait for a slot.
+
+The Executors tab shows where pressure lands. Compare active tasks, memory use, GC time, shuffle traffic, and failed tasks across executors.
+
+An imbalance can support a skew hypothesis. Pressure across every executor points instead toward a cost shared by the stage, such as broad memory or shuffle pressure.
+-->
+
+<style>
+@import './styles/index.css';
+</style>
+
+---
+zoom: 0.85
+---
+
+# SQL tab
+
+<div class="mental-eyebrow text-amber-700">Concept 5 of 5 · why those stages exist</div>
+
+<div class="mental-grid">
+  <div class="mental-copy">
+    <div class="mental-kicker text-amber-700">The SQL tab is…</div>
+    <div class="mental-definition">The <b>physical plan</b> Spark actually chose for a SQL or DataFrame query.</div>
+    <div class="mental-detail">
+      <b>Read it like this</b>
+      <span>Every <code>Exchange</code> is a shuffle—and therefore a stage boundary. Metrics hang from each operator.</span>
+    </div>
+    <div class="mental-detail">
+      <b>Why it matters</b>
+      <span>Jobs and stages show <i>what</i> ran. The SQL plan explains <b>why</b>.</span>
+    </div>
+  </div>
+  <div class="mental-panel plan-panel">
+    <div class="mental-panel-title">Physical plan · orders JOIN customers</div>
+    <div class="mental-plan">
+      <div class="mental-plan-node">WriteFiles <small>812 rows · 3.4 MB</small></div>
+      <div class="plan-line"></div>
+      <div class="mental-plan-node">SortMergeJoin <small>inner · customer_id</small></div>
+      <div class="plan-line"></div>
+      <div class="plan-branches">
+        <div class="plan-branch">
+          <div class="mental-plan-node exchange">Exchange (hash)<small>shuffle · 18 MB</small></div>
+          <div class="plan-line"></div>
+          <div class="mental-plan-node compact">HashAggregate</div>
+          <div class="plan-line"></div>
+          <div class="mental-plan-node compact">Scan orders</div>
+        </div>
+        <div class="plan-branch">
+          <div class="mental-plan-node exchange">Exchange (hash)<small>shuffle · 4 MB</small></div>
+          <div class="plan-line"></div>
+          <div class="mental-plan-node compact">Filter active</div>
+          <div class="plan-line"></div>
+          <div class="mental-plan-node compact">Scan customers</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!--
+The SQL tab connects the runtime evidence back to the physical work Spark chose.
+
+Read this plan from the scans upward. Both sides pass through an Exchange, so Spark redistributes both datasets before the sort-merge join. Those exchanges explain the stage boundaries visible elsewhere in the UI.
+
+Use operator metrics to connect an expensive stage to a join, aggregation, scan, or write. The metrics tell you what hurts; the plan explains why that work exists.
+-->
+
+<style>
+@import './styles/index.css';
 </style>
 
 ---
