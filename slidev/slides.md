@@ -97,70 +97,90 @@ The key contrast is random tuning versus evidence-driven diagnosis.
 -->
 
 ---
+zoom: 0.85
+---
 
-# How Spark work is distributed
+# Spark architecture: driver to workers
 
-<div class="mental-eyebrow text-blue-700">From an action to parallel tasks · the runtime architecture</div>
+<div class="mental-eyebrow text-blue-700">A hierarchy of coordination, execution, and data movement</div>
 
-<div class="architecture-wrap">
-  <div class="architecture-source">
-    <div class="architecture-source-card">
-      <div class="architecture-label">YOU / NOTEBOOK</div>
-      <div class="architecture-code">df.groupBy(<span>"zone"</span>).count()</div>
-      <div class="architecture-action">An action makes Spark do the work.</div>
+<div class="architecture-tree">
+  <div class="notebook-card">
+    <div class="architecture-label">NOTEBOOK / APPLICATION</div>
+    <div class="notebook-row">
+      <span class="notebook-mark">▤</span>
+      <b>groupBy("zone").count()</b>
     </div>
-    <div class="architecture-arrow source-arrow">→</div>
+    <span class="notebook-caption">An action plugs into the driver.</span>
   </div>
+
+  <div class="tree-arrow">↓ <span>submit</span></div>
 
   <div class="architecture-driver">
     <div class="driver-kicker">DRIVER NODE</div>
-    <div class="driver-title">Plans &amp; coordinates</div>
+    <div class="driver-title">Application coordinator</div>
     <div class="driver-stack">
-      <span>Builds the DAG</span>
-      <span>Splits work into stages</span>
-      <span>Schedules tasks</span>
+      <span><b>DAG</b> builds the plan</span>
+      <span><b>Stages</b> split at shuffles</span>
+      <span><b>Tasks</b> scheduled per partition</span>
     </div>
-    <div class="driver-note">The driver sends instructions — not every row of data.</div>
+    <div class="driver-note">Coordinates the work; executors process the data.</div>
   </div>
 
-  <div class="architecture-arrow worker-arrow">→</div>
+  <div class="driver-branch"><span>schedule tasks</span></div>
 
-  <div class="architecture-runtime">
-    <div class="runtime-heading">
+  <div class="workers-cluster">
+    <div class="cluster-heading">
       <b>WORKER NODES</b>
-      <span>executors run tasks in parallel</span>
+      <span>each node hosts an executor with task slots</span>
     </div>
 
-    <div class="runtime-stage">
-      <div class="runtime-stage-label"><b>STAGE 1</b><span>scan + filter</span></div>
-      <div class="node-grid">
-        <div class="node-card">
-          <div class="node-head"><b>Node 1</b><span>Executor</span></div>
-          <div class="task-pills"><i>Task · P0</i><i>Task · P3</i></div>
+    <div class="worker-grid">
+      <div class="worker-node">
+        <div class="worker-heading">
+          <span class="worker-icon"><i></i><i></i><i></i><i></i></span>
+          <span><b>Worker 1</b><small>node-01</small></span>
         </div>
-        <div class="node-card">
-          <div class="node-head"><b>Node 2</b><span>Executor</span></div>
-          <div class="task-pills"><i>Task · P1</i><i>Task · P4</i></div>
+        <div class="executor-box">
+          <div class="executor-heading"><b>EXECUTOR</b><span>2 slots</span></div>
+          <div class="slot-row"><span>Task P0</span><span>Task P3</span></div>
         </div>
-        <div class="node-card">
-          <div class="node-head"><b>Node 3</b><span>Executor</span></div>
-          <div class="task-pills"><i>Task · P2</i><i>Task · P5</i></div>
+      </div>
+      <div class="worker-node">
+        <div class="worker-heading">
+          <span class="worker-icon"><i></i><i></i><i></i><i></i></span>
+          <span><b>Worker 2</b><small>node-02</small></span>
+        </div>
+        <div class="executor-box">
+          <div class="executor-heading"><b>EXECUTOR</b><span>2 slots</span></div>
+          <div class="slot-row"><span>Task P1</span><span>Task P4</span></div>
+        </div>
+      </div>
+      <div class="worker-node">
+        <div class="worker-heading">
+          <span class="worker-icon"><i></i><i></i><i></i><i></i></span>
+          <span><b>Worker 3</b><small>node-03</small></span>
+        </div>
+        <div class="executor-box">
+          <div class="executor-heading"><b>EXECUTOR</b><span>2 slots</span></div>
+          <div class="slot-row"><span>Task P2</span><span>Task P5</span></div>
         </div>
       </div>
     </div>
 
-    <div class="shuffle-band">
-      <div class="shuffle-arrows">↗ &nbsp; ↘ &nbsp; ↙ &nbsp; ↖</div>
-      <div><b>SHUFFLE</b><span>records move across workers so equal keys meet</span></div>
-      <div class="shuffle-tag">stage boundary</div>
+    <div class="shuffle-lane">
+      <div class="shuffle-word">SHUFFLE</div>
+      <div class="shuffle-arrows">↔ &nbsp; ↔ &nbsp; ↔</div>
+      <div class="shuffle-caption">records cross worker boundaries so equal keys meet</div>
+      <span class="shuffle-tag">stage boundary</span>
     </div>
 
-    <div class="runtime-stage stage-two">
-      <div class="runtime-stage-label"><b>STAGE 2</b><span>aggregate + write</span></div>
-      <div class="node-grid">
-        <div class="node-card result"><div class="node-head"><b>Node 1</b><span>Executor</span></div><div class="task-pills"><i>Task · K0</i></div></div>
-        <div class="node-card result"><div class="node-head"><b>Node 2</b><span>Executor</span></div><div class="task-pills"><i>Task · K1</i></div></div>
-        <div class="node-card result"><div class="node-head"><b>Node 3</b><span>Executor</span></div><div class="task-pills"><i>Task · K2</i></div></div>
+    <div class="next-stage">
+      <div class="next-stage-label"><b>STAGE 2</b><small>aggregate + write</small></div>
+      <div class="next-stage-tasks">
+        <span><b>Task K0</b><small>partition of keys</small></span>
+        <span><b>Task K1</b><small>partition of keys</small></span>
+        <span><b>Task K2</b><small>partition of keys</small></span>
       </div>
     </div>
   </div>
@@ -181,168 +201,259 @@ This is the picture to keep in mind when we say “shuffle”: it is data moveme
 -->
 
 <style>
-.architecture-wrap {
-  display: grid;
-  grid-template-columns: 13rem 18rem 1.5rem minmax(0, 1fr);
-  gap: 0.8rem;
-  align-items: stretch;
-  margin-top: 1rem;
-}
-.architecture-source {
+.architecture-tree {
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: 0.9rem;
+  align-items: center;
+  margin-top: 0.8rem;
 }
-.architecture-source-card,
+.notebook-card,
 .architecture-driver,
-.architecture-runtime {
+.workers-cluster {
   border: 1px solid #cbd5e1;
   border-radius: 1rem;
   background: #f8fafc;
 }
-.architecture-source-card { padding: 1rem; }
+.notebook-card {
+  width: 24rem;
+  padding: 0.8rem 1.1rem;
+}
 .architecture-label,
 .driver-kicker,
-.runtime-heading b {
+.cluster-heading b {
   color: #64748b;
   font-size: 0.68rem;
   font-weight: 900;
   letter-spacing: 0.1em;
 }
-.architecture-code {
-  margin-top: 0.8rem;
-  border-radius: 0.55rem;
-  background: white;
-  padding: 0.7rem;
-  color: #334155;
-  font-family: monospace;
-  font-size: 0.8rem;
-  line-height: 1.35;
-}
-.architecture-code span { color: #2563eb; }
-.architecture-action {
-  margin-top: 0.8rem;
-  color: #475569;
-  font-size: 0.82rem;
-  line-height: 1.35;
-}
-.architecture-arrow {
+.notebook-row {
   display: flex;
   align-items: center;
-  justify-content: center;
-  color: #94a3b8;
-  font-size: 2rem;
-  font-weight: 800;
+  gap: 0.7rem;
+  margin-top: 0.55rem;
+  color: #334155;
+  font-family: monospace;
+  font-size: 0.85rem;
 }
-.source-arrow { transform: translateX(0.4rem); }
+.notebook-mark {
+  display: grid;
+  width: 1.8rem;
+  height: 1.8rem;
+  place-items: center;
+  border-radius: 0.45rem;
+  background: #dbeafe;
+  color: #2563eb;
+  font-family: sans-serif;
+  font-size: 1.1rem;
+}
+.notebook-caption {
+  display: block;
+  margin-top: 0.45rem;
+  color: #64748b;
+  font-size: 0.72rem;
+}
+.tree-arrow {
+  position: relative;
+  height: 1.8rem;
+  color: #2563eb;
+  font-size: 1.4rem;
+  line-height: 1;
+}
+.tree-arrow span {
+  position: absolute;
+  top: 0.5rem;
+  left: 1.1rem;
+  color: #64748b;
+  font-size: 0.62rem;
+  white-space: nowrap;
+}
 .architecture-driver {
-  align-self: center;
+  width: 30rem;
   border-color: #2563eb;
   background: #eff6ff;
-  padding: 1.2rem;
+  padding: 0.85rem 1.2rem;
   color: #1e3a8a;
 }
 .driver-title {
-  margin-top: 0.45rem;
-  font-size: 1.5rem;
+  margin-top: 0.35rem;
+  font-size: 1.35rem;
   font-weight: 800;
 }
 .driver-stack {
   display: grid;
-  gap: 0.5rem;
-  margin-top: 1.2rem;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.45rem;
+  margin-top: 0.7rem;
 }
 .driver-stack span {
-  border-radius: 0.55rem;
+  border-radius: 0.5rem;
   background: white;
-  padding: 0.55rem 0.7rem;
+  padding: 0.45rem 0.5rem;
   color: #334155;
-  font-size: 0.82rem;
-  font-weight: 700;
+  font-size: 0.7rem;
+  line-height: 1.25;
+  text-align: center;
 }
+.driver-stack b { display: block; color: #2563eb; font-size: 0.66rem; }
 .driver-note {
-  margin-top: 1.1rem;
+  margin-top: 0.65rem;
   color: #475569;
-  font-size: 0.75rem;
-  line-height: 1.35;
+  font-size: 0.7rem;
+  text-align: center;
 }
-.architecture-runtime {
-  min-width: 0;
-  border-color: #bbf7d0;
+.driver-branch {
+  position: relative;
+  width: min(75%, 55rem);
+  height: 2.2rem;
+  border-bottom: 2px solid #93c5fd;
+}
+.driver-branch::before {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  height: 100%;
+  border-left: 2px solid #93c5fd;
+  content: '';
+}
+.driver-branch span {
+  position: absolute;
+  bottom: 0.2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: white;
+  padding: 0 0.5rem;
+  color: #64748b;
+  font-size: 0.64rem;
+  white-space: nowrap;
+}
+.workers-cluster {
+  width: 100%;
+  border-color: #86efac;
   background: #f0fdf4;
-  padding: 0.9rem;
+  padding: 0.75rem 1rem 0.85rem;
 }
-.runtime-heading {
+.cluster-heading {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.65rem;
+  margin-bottom: 0.6rem;
 }
-.runtime-heading b { color: #166534; }
-.runtime-heading span {
-  color: #64748b;
-  font-size: 0.72rem;
-}
-.runtime-stage {
+.cluster-heading b { color: #166534; }
+.cluster-heading span { color: #64748b; font-size: 0.7rem; }
+.worker-grid,
+.next-stage-tasks {
   display: grid;
-  grid-template-columns: 7rem minmax(0, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.7rem;
-  align-items: center;
 }
-.runtime-stage-label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  color: #166534;
-}
-.runtime-stage-label b { font-size: 0.8rem; }
-.runtime-stage-label span { color: #64748b; font-size: 0.68rem; }
-.node-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.55rem; }
-.node-card {
+.worker-node {
   border: 1px solid #86efac;
-  border-radius: 0.7rem;
+  border-radius: 0.75rem;
   background: white;
-  padding: 0.6rem;
+  padding: 0.65rem;
 }
-.node-card.result { border-color: #c4b5fd; }
-.node-head { display: flex; justify-content: space-between; gap: 0.4rem; color: #334155; font-size: 0.72rem; }
-.node-head span { color: #64748b; font-size: 0.62rem; }
-.task-pills { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.55rem; }
-.task-pills i {
-  border-radius: 0.4rem;
+.worker-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: #334155;
+  font-size: 0.8rem;
+}
+.worker-heading small,
+.next-stage-label small,
+.next-stage-tasks small {
+  display: block;
+  margin-top: 0.15rem;
+  color: #64748b;
+  font-size: 0.62rem;
+  font-weight: 500;
+}
+.worker-icon {
+  display: grid;
+  grid-template-columns: repeat(2, 0.35rem);
+  gap: 0.18rem;
+  padding: 0.35rem;
+  border-radius: 0.45rem;
   background: #dcfce7;
-  padding: 0.3rem 0.4rem;
+}
+.worker-icon i {
+  width: 0.35rem;
+  height: 0.35rem;
+  border-radius: 999px;
+  background: #16a34a;
+}
+.executor-box {
+  margin-top: 0.6rem;
+  border: 1px solid #d1fae5;
+  border-radius: 0.55rem;
+  background: #f8fafc;
+  padding: 0.5rem;
+}
+.executor-heading {
+  display: flex;
+  justify-content: space-between;
   color: #166534;
   font-size: 0.62rem;
-  font-style: normal;
-  font-weight: 800;
+  letter-spacing: 0.08em;
 }
-.result .task-pills i { background: #ede9fe; color: #6d28d9; }
-.shuffle-band {
-  display: grid;
-  grid-template-columns: 1fr 1.7fr auto;
-  align-items: center;
-  gap: 0.7rem;
-  margin: 0.7rem 0;
-  border-top: 2px dashed #f59e0b;
-  border-bottom: 2px dashed #f59e0b;
-  padding: 0.55rem 0;
-  color: #92400e;
+.executor-heading span { color: #64748b; letter-spacing: 0; }
+.slot-row { display: flex; gap: 0.35rem; margin-top: 0.45rem; }
+.slot-row span {
+  flex: 1;
+  border-radius: 0.35rem;
+  background: #dcfce7;
+  padding: 0.35rem 0.2rem;
+  color: #166534;
+  font-size: 0.62rem;
+  font-weight: 800;
   text-align: center;
 }
-.shuffle-arrows { color: #f59e0b; font-size: 1.25rem; font-weight: 800; white-space: nowrap; }
-.shuffle-band b { display: block; font-size: 0.72rem; letter-spacing: 0.08em; }
-.shuffle-band span { display: block; margin-top: 0.15rem; color: #78716c; font-size: 0.66rem; }
-.shuffle-tag { border-radius: 999px; background: #fef3c7; padding: 0.3rem 0.55rem; color: #92400e; font-size: 0.62rem; font-weight: 800; white-space: nowrap; }
+.shuffle-lane {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  align-items: center;
+  gap: 0.7rem;
+  margin: 0.65rem 0;
+  border-top: 2px dashed #f59e0b;
+  border-bottom: 2px dashed #f59e0b;
+  padding: 0.45rem 0.6rem;
+  color: #92400e;
+}
+.shuffle-word { font-size: 0.7rem; font-weight: 900; letter-spacing: 0.1em; }
+.shuffle-arrows { color: #f59e0b; font-size: 1.15rem; font-weight: 800; white-space: nowrap; }
+.shuffle-caption { color: #78716c; font-size: 0.68rem; }
+.shuffle-tag {
+  border-radius: 999px;
+  background: #fef3c7;
+  padding: 0.28rem 0.5rem;
+  color: #92400e;
+  font-size: 0.6rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.next-stage {
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1fr);
+  gap: 0.7rem;
+  align-items: center;
+}
+.next-stage-label { color: #6d28d9; font-size: 0.75rem; }
+.next-stage-tasks span {
+  border: 1px solid #c4b5fd;
+  border-radius: 0.55rem;
+  background: #faf5ff;
+  padding: 0.45rem 0.55rem;
+  color: #6d28d9;
+  font-size: 0.68rem;
+  text-align: center;
+}
 .architecture-takeaway {
   display: flex;
   justify-content: center;
   gap: 0.7rem;
-  margin-top: 0.9rem;
+  margin-top: 0.75rem;
   color: #475569;
-  font-size: 1rem;
+  font-size: 0.95rem;
 }
 .architecture-takeaway b { color: #0f172a; }
 </style>
