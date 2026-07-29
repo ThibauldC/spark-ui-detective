@@ -10,7 +10,7 @@
   },
   "dependencies": {},
   "devDependencies": {
-    "@slidev/cli": "latest",
+    "@slidev/cli": "52.18.0",
     "slidev-theme-light-icons": "latest"
   }
 }

@@ -11,9 +11,9 @@ transition: slide-left
 mdc: true
 ---
 
-# The Spark Detective
+# The Spark detective
 
-## Diagnosing Spark Performance in Microsoft Fabric
+## Diagnosing Spark performance in Microsoft Fabric
 
 <div class="mt-10 text-2xl opacity-80">
 Solving the case of the slow Spark job without memorizing every Spark UI tab.
