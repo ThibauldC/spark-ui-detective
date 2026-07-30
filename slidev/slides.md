@@ -2,8 +2,7 @@
 theme: light-icons
 title: The Spark Detective
 info: |
-  A Slidev deck based on sections 1, 2, and 4 of the Obsidian outline
-  "The Spark Detective: Diagnosing Spark Performance in Microsoft Fabric".
+  The Spark Detective: Diagnosing Spark Performance in Microsoft Fabric.
 class: text-left
 drawings:
   persist: false
@@ -36,7 +35,7 @@ Set expectations that the first part of the talk covers the mystery and the ment
 >
 > Nothing obvious changed. Where do we look?
 
-<div class="mt-12 grid grid-cols-3 gap-4 text-center">
+<div class="mt-24 grid grid-cols-3 gap-4 text-center">
   <div class="metric-card">
     <div class="metric">12m</div>
     <div class="label">Yesterday</div>
@@ -50,6 +49,14 @@ Set expectations that the first part of the talk covers the mystery and the ment
     <div class="label">Root cause</div>
   </div>
 </div>
+
+<img src="./images/detective.jpg" class="absolute top-6 right-6 w-36 rounded-xl shadow-lg" />
+
+<style>
+blockquote {
+  max-width: calc(100% - 11rem);
+}
+</style>
 
 <!--
 Use this slide to create tension. Do not explain the answer yet.
@@ -430,7 +437,8 @@ The shuffle is the important exception to the simple fan-out picture: records cr
 
 <!--
 SparkSession spins up one application
-Use the hierarchy to establish the vocabulary before opening individual Spark UI tabs.
+
+Stage: groups operations that Spark can pipeline without redistributing data. Shuffle is the boundary. Talk about wide vs narrow transformations?
 An application can contain multiple jobs. An action triggers a job, a shuffle separates stages, and each stage runs one task per partition.
 -->
 
