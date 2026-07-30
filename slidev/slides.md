@@ -14,13 +14,34 @@ mdc: true
 
 ## The curious case of the slow Spark job: a detective's toolbox
 
-<div class="mt-10 text-2xl opacity-80">
-Solving the case of the slow Spark job without memorizing every Spark UI tab.
+<div class="title-visual mt-10">
+  <img src="./images/spark_ui_fabric.png" alt="Microsoft Fabric Spark UI" class="title-visual-ui" />
+  <img src="./images/crime-scene-tape.png" alt="Crime scene tape" class="title-visual-tape" />
 </div>
 
-<div class="mt-14 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-slate-500">
-Placeholder: title visual, Spark UI screenshot, or detective-style Fabric/Spark image
-</div>
+<style>
+.title-visual {
+  position: relative;
+  width: 94%;
+  margin-inline: auto;
+}
+.title-visual-ui {
+  display: block;
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 1rem;
+  box-shadow: 0 0.75rem 1.5rem rgb(15 23 42 / 0.15);
+}
+.title-visual-tape {
+  position: absolute;
+  top: 20%;
+  left: 30%;
+  z-index: 1;
+  width: 42%;
+  transform: rotate(-8deg);
+  filter: drop-shadow(0 0.35rem 0.25rem rgb(15 23 42 / 0.25));
+}
+</style>
 
 <!--
 This is a practical investigation, not a Spark UI tour.
@@ -176,24 +197,25 @@ zoom: 0.85
   </div>
 
   <div class="shuffle-lane">
-    <span class="shuffle-word">SHUFFLE</span>
+    <span class="shuffle-word">SHUFFLE (wide transformation)</span>
     <span class="shuffle-arrows">↔ &nbsp; ↔ &nbsp; ↔</span>
     <span class="shuffle-caption">data crosses worker boundaries before the next phase</span>
   </div>
 </div>
 
-<div class="architecture-takeaway">
-  <span><b>Driver</b> coordinates</span><span>·</span><span><b>Executors</b> process partitions</span><span>·</span><span><b>Shuffle</b> redistributes data between stages</span>
-</div>
-
 <!--
-Before the mental model, give the room a picture of the cluster.
+Spark cluster
 
-Start on the left: the notebook submits an action to the driver. The driver is the coordinator. It plans the work, schedules it, and tracks progress; it is not where all the rows are processed.
+The Spark cluster is created as follows: 1 driver, 1 or more workers or nodes
+
+Start on the left: the notebook submits an action to the driver. The driver is the coordinator. It plans the work, schedules it, and tracks progress; it is not where all the rows are processed. Notebook asks SparkSession this is a driver process. SparkSession manages Spark application (1-to-1 relation)
 
 The driver fans work out to multiple worker nodes. Each worker hosts an executor with several parallel slots, so partitions can be processed at the same time. More workers mean more possible parallelism.
 
-The shuffle is the important exception to the simple fan-out picture: records cross worker boundaries so that equal keys meet before the next phase. That data movement is why a shuffle becomes a stage boundary in the Spark UI.
+The shuffle is the important exception to the simple fan-out picture: records cross worker boundaries so that equal keys meet before the next phase. That data movement is why a shuffle becomes a stage boundary in the Spark UI. Shuffles are triggered by something called wide transformations. Wide vs narrow transformation (will not go further into this)
+
+Narrow: transformations for which each input partition will contribute to only one output partition (filter)
+Wide: input partitions will contribute to many output partitions
 -->
 
 <style>
@@ -399,15 +421,6 @@ The shuffle is the important exception to the simple fan-out picture: records cr
 .shuffle-word { font-size: 0.7rem; font-weight: 900; letter-spacing: 0.1em; }
 .shuffle-arrows { color: #f59e0b; font-size: 1.15rem; font-weight: 800; white-space: nowrap; }
 .shuffle-caption { color: #78716c; font-size: 0.68rem; }
-.architecture-takeaway {
-  display: flex;
-  justify-content: center;
-  gap: 0.7rem;
-  margin-top: 0.75rem;
-  color: #475569;
-  font-size: 0.95rem;
-}
-.architecture-takeaway b { color: #0f172a; }
 </style>
 
 ---
@@ -436,7 +449,7 @@ The shuffle is the important exception to the simple fan-out picture: records cr
 </div>
 
 <!--
-SparkSession spins up one application
+Notebook creates SparkSession, or Spark application.
 
 Stage: groups operations that Spark can pipeline without redistributing data. Shuffle is the boundary. Talk about wide vs narrow transformations?
 An application can contain multiple jobs. An action triggers a job, a shuffle separates stages, and each stage runs one task per partition.
@@ -1238,6 +1251,43 @@ Each case starts from the left again. In Case 1, data volume grows and a stage s
 Keep this ribbon visible during each walkthrough. Move the highlight as we change views. The audience should know why we click a stage, task, SQL node, or executor before the screen changes.
 
 Set up Case 1: return to the 12-minute run that became a 55-minute run. We already know the route. Now we will work the evidence.
+-->
+
+<style>
+.case-card {
+  display: flex;
+  min-height: 7.5rem;
+  flex-direction: column;
+  justify-content: center;
+  border: 1px solid #cbd5e1;
+  border-radius: 1rem;
+  background: #f8fafc;
+  padding: 1rem;
+}
+.case-card b { color: #2563eb; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.case-card span { margin-top: 0.5rem; font-size: 1.05rem; font-weight: 700; }
+</style>
+
+
+---
+
+# Case 0: writing to disk
+
+<DetectiveFieldGuide :active="0" />
+
+<div class="mt-8 grid grid-cols-3 gap-5 text-center">
+  <div class="case-card"><b>Case 1</b><span>Data grew and spilled</span></div>
+  <div class="case-card"><b>Case 2</b><span>One straggler hid the skew</span></div>
+  <div class="case-card"><b>Case 3</b><span>Too much moving, too few hands</span></div>
+</div>
+
+<div class="mt-10 text-center text-3xl font-bold">Reset to Find. Follow the clues.</div>
+
+<!--
+Remember wide vs narrow transformations
+
+narrow: performs operation called pipelining -> when you specify multiple filters they are performed in memory
+wide: Spark needs to write the results to disk
 -->
 
 <style>
