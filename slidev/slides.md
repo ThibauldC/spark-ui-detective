@@ -203,21 +203,6 @@ zoom: 0.85
   </div>
 </div>
 
-<!--
-Spark cluster
-
-The Spark cluster is created as follows: 1 driver, 1 or more workers or nodes
-
-Start on the left: the notebook submits an action to the driver. The driver is the coordinator. It plans the work, schedules it, and tracks progress; it is not where all the rows are processed. Notebook asks SparkSession this is a driver process. SparkSession manages Spark application (1-to-1 relation)
-
-The driver fans work out to multiple worker nodes. Each worker hosts an executor with several parallel slots, so partitions can be processed at the same time. More workers mean more possible parallelism.
-
-The shuffle is the important exception to the simple fan-out picture: records cross worker boundaries so that equal keys meet before the next phase. That data movement is why a shuffle becomes a stage boundary in the Spark UI. Shuffles are triggered by something called wide transformations. Wide vs narrow transformation (will not go further into this)
-
-Narrow: transformations for which each input partition will contribute to only one output partition (filter)
-Wide: input partitions will contribute to many output partitions
--->
-
 <style>
 .architecture-topology {
   display: grid;
@@ -423,6 +408,20 @@ Wide: input partitions will contribute to many output partitions
 .shuffle-caption { color: #78716c; font-size: 0.68rem; }
 </style>
 
+<!--
+Spark cluster
+
+The Spark cluster is created as follows: 1 driver, 1 or more workers or nodes
+
+Start on the left: the notebook submits an action to the driver. The driver is the coordinator. It plans the work, schedules it, and tracks progress; it is not where all the rows are processed. Notebook asks SparkSession this is a driver process. SparkSession manages Spark application (1-to-1 relation)
+
+The driver fans work out to multiple worker nodes. Each worker hosts an executor with several parallel slots, so partitions can be processed at the same time. More workers mean more possible parallelism.
+
+The shuffle is the important exception to the simple fan-out picture: records cross worker boundaries so that equal keys meet before the next phase. That data movement is why a shuffle becomes a stage boundary in the Spark UI. Shuffles are triggered by something called wide transformations. Wide vs narrow transformation (will not go further into this)
+
+Narrow: transformations for which each input partition will contribute to only one output partition (filter)
+Wide: input partitions will contribute to many output partitions
+-->
 ---
 
 # Spark UI mental model
@@ -461,12 +460,11 @@ An application can contain multiple jobs. An action triggers a job, a shuffle se
 
 <div class="mental-eyebrow text-blue-700">The same hierarchy, in a real Fabric run</div>
 
-<div class="screenshot-placeholder">
-  <div>
-    <div class="text-3xl font-bold text-slate-700">Screenshot goes here</div>
-    <div class="mt-3 text-lg text-slate-500">Replace this panel with a Spark UI screenshot.</div>
-  </div>
-</div>
+<img
+  src="./images/spark_ui_jobs.png"
+  alt="Spark UI Jobs tab"
+  class="spark-ui-jobs-screenshot"
+/>
 
 <!--
 Add the Spark UI screenshot here before moving into the individual tabs.
@@ -475,6 +473,17 @@ Keep this slide as the visual bridge from the mental model to the practical walk
 
 <style>
 @import './styles/index.css';
+
+.spark-ui-jobs-screenshot {
+  display: block;
+  width: 100%;
+  max-height: 27rem;
+  margin-top: 1.25rem;
+  object-fit: contain;
+  border: 1px solid #cbd5e1;
+  border-radius: 1.25rem;
+  box-shadow: 0 0.75rem 1.5rem rgb(15 23 42 / 0.15);
+}
 </style>
 
 ---
@@ -729,18 +738,61 @@ Use operator metrics to connect an expensive stage to a join, aggregation, scan,
 
 ---
 
-# Tiny Fabric Orientation
+# Spark UI vs Spark History Server
 
-In Fabric, you usually do not start by typing a Spark UI URL.
+<div class="mt-4 comparison-table">
+
+| | Spark UI | Spark History Server
+|---|---|---|
+| Where the data comes from | The running Spark application and its driver | Persisted Spark event logs |
+| When it is most useful | While the application is running | After the application has completed, failed, or been cancelled |
+| Freshness | Live or near-real-time | Reconstructed from logs; running applications may be updated intermittently |
+| Lifetime | Normally disappears when the application and driver stop | Remains available after the application ends, subject to Fabric’s retention of the run |
+| Typical usage | Watch active jobs, stages, tasks and executors | Post-mortem analysis, performance investigation and comparing what happened during an earlier run |
+| Standard open-source Spark endpoint | Usually port `4040` on the driver | Usually port `18080` on a separate History Server |
+</div>
+
+<style>
+.comparison-table table {
+  font-size: 1rem;
+  line-height: 1.2;
+}
+.comparison-table th,
+.comparison-table td {
+  padding: 0.45rem 0.6rem;
+}
+</style>
+
+<!--
+First going to talk about Spark UI vs History server, this exists in open-source version of Spark as well.
+
+When it is most useful: Spark UI -> to see why your notebook/Spark job is running as long as it is, Spark HS -> to see why your daily batch job took this long
+
+https://spark.apache.org/docs/latest/web-ui.html
+
+Every SparkContext launches a Web UI, by default on port 4040, that displays useful information about the application. This includes:
+A list of scheduler stages and tasks
+A summary of RDD sizes and memory usage
+Environmental information.
+Information about the running executors
+
+
+It is still possible to construct the UI of an application through Spark’s history server, provided that the application’s event logs exist.
+-->
+
+---
+
+# What is available in Fabric?
 
 <div class="mt-8">
 
 | Situation | Use |
 |---|---|
+| You do not know which run to inspect | **Monitor hub / Recent runs** |
+| You want a first view of run details | **Spark Application detail monitoring** |
+| Compare runs over time and see anomalies | **Monitor run series** |
 | The Spark application is still running | **Live Spark UI** |
 | The Spark application completed or failed | **Spark History Server** |
-| You do not know which run to inspect | **Monitor hub / Recent runs** |
-
 </div>
 
 <div class="mt-8 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-slate-500">
@@ -752,30 +804,79 @@ Keep this orientation deliberately short. The goal is just to anchor Spark UI in
 Explain that live Spark UI is for active applications, while History Server is for completed or failed applications.
 If the audience does not know which run is relevant, they should start in Monitor hub or Recent runs before drilling into Spark internals.
 -->
+---
+
+# Monitor Hub/Recent runs
+
+<div class="mental-eyebrow text-blue-700">Looking at recent runs of your notebook/Spark job</div>
+
+<img
+  src="./images/recent_runs.png"
+  alt="Recent runs overview"
+  class="spark-ui-jobs-screenshot"
+/>
+
+<!--
+Add the Spark UI screenshot here before moving into the individual tabs.
+Keep this slide as the visual bridge from the mental model to the practical walkthrough.
+-->
+
+<style>
+@import './styles/index.css';
+
+.spark-ui-jobs-screenshot {
+  display: block;
+  width: 100%;
+  max-height: 27rem;
+  margin-top: 1.25rem;
+  object-fit: contain;
+  border: 1px solid #cbd5e1;
+  border-radius: 1.25rem;
+  box-shadow: 0 0.75rem 1.5rem rgb(15 23 42 / 0.15);
+}
+</style>
 
 ---
 
-# The First Decision
+# Spark application detail monitoring
 
-```mermaid
-flowchart LR
-    A[Fabric Monitor hub<br/>or Recent runs] --> B{Application state?}
-    B -->|Running| C[Live Spark UI]
-    B -->|Completed or failed| D[Spark History Server]
-    B -->|Unknown run| A
-    C --> E[Stage and task evidence]
-    D --> E
-```
+<div class="mental-eyebrow text-blue-700">A first jump into detail, but higher-level</div>
 
-<div class="mt-8 text-xl text-center opacity-80">
-Find the run, choose live or post-mortem, then read the Spark evidence.
-</div>
+<img
+  src="./images/application_detail_monitoring.png"
+  alt="Fabric Spark Application detail monitoring"
+  class="detail-monitoring-screenshot"
+/>
+
+<style>
+@import './styles/index.css';
+
+.detail-monitoring-screenshot {
+  display: block;
+  width: 100%;
+  max-height: 25rem;
+  margin-top: 1.25rem;
+  object-fit: contain;
+  border: 1px solid #cbd5e1;
+  border-radius: 1.25rem;
+  box-shadow: 0 0.75rem 1.5rem rgb(15 23 42 / 0.15);
+}
+</style>
 
 <!--
-Use the diagram to make the Fabric entry path memorable.
-The important point is that Fabric gives the starting point and operational context, while Spark UI and History Server provide detailed execution evidence.
-Transition from here into the mental model: once we reach Spark evidence, we need enough vocabulary to interpret what we see.
+Effective monitoring of Spark applications enhances performance management and troubleshooting, allowing users to optimize their workflows and quickly identify issues.
+
+
+Access Spark monitoring details from the Fabric Monitoring Hub or Recent runs panel.
+- Jobs tab: View job runs, including Job ID, status, and code snippets.
+- Resources tab: Visualize executor usage in real-time.
+- Summary panel: Access application details.
+- Logs tab: View and download logs for various processes, with filtering options.
+- Data tab: Copy or download input/output file information and view properties.
+- Item snapshots tab: Browse related items and view snapshots of code and parameters at execution time.
+- Diagnostics panel: Receive real-time recommendations and error analysis from Spark Advisor.
 -->
+
 ---
 layout: default
 clicks: 6
