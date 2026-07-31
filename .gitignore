@@ -4,3 +4,5 @@ dist/
 *.pptx
 .DS_Store
 *.html
+__pycache__/
+
