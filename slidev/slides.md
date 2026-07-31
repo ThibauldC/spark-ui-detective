@@ -878,24 +878,216 @@ Access Spark monitoring details from the Fabric Monitoring Hub or Recent runs pa
 -->
 
 ---
+zoom: 0.85
+---
+
+# How to reach the right Spark lens
+
+<div class="mental-eyebrow text-blue-700">Start where the run is visible; its state chooses the final view</div>
+
+<div class="fabric-route-map">
+  <div class="route-column route-starts">
+    <div class="route-heading">START FROM</div>
+    <div class="route-source notebook-source"><b>Notebook</b><small>Run → All runs</small></div>
+    <div class="route-source job-source"><b>Spark job definition</b><small>⋯ → Recent runs</small></div>
+    <div class="route-source monitor-source"><b>Monitor hub</b><small>Monitor → select application</small></div>
+  </div>
+
+  <div class="route-column route-arrows" aria-hidden="true">
+    <div class="route-heading"> </div>
+    <div>→</div>
+    <div>→</div>
+    <div>→</div>
+  </div>
+
+  <div class="route-column route-finders">
+    <div class="route-heading">FIND THE RUN</div>
+    <div class="route-step recent-step"><b>Recent runs</b><small>Notebook / job definition</small></div>
+    <div class="route-step recent-step"><b>Recent runs</b><small>Notebook / job definition</small></div>
+    <div class="route-step monitor-step"><b>Application list</b><small>Monitor hub</small></div>
+  </div>
+
+  <div class="route-column route-arrows" aria-hidden="true">
+    <div class="route-heading"> </div>
+    <div>→</div>
+    <div>→</div>
+    <div>→</div>
+  </div>
+
+  <div class="route-column route-details">
+    <div class="route-heading">DRILL INTO</div>
+    <div class="route-detail-card"><b>Spark application detail</b><small>Jobs · resources · logs · snapshots</small></div>
+    <div class="route-detail-card"><b>Spark application detail</b><small>Jobs · resources · logs · snapshots</small></div>
+    <div class="route-detail-card"><b>Spark application detail</b><small>Jobs · resources · logs · snapshots</small></div>
+  </div>
+</div>
+
+<div class="lens-branch">
+  <div class="branch-label">APPLICATION STATE</div>
+  <div class="branch-source">Spark application detail</div>
+  <div class="branch-arrow">→</div>
+  <div class="lens-card live-lens"><span>RUNNING</span><b>Spark UI</b><small>live execution</small></div>
+  <div class="lens-or">or</div>
+  <div class="lens-card ended-lens"><span>ENDED</span><b>Spark History Server</b><small>post-mortem analysis</small></div>
+</div>
+
+<div class="notebook-shortcut"><b>Notebook shortcut:</b> cell progress → <strong>Spark UI</strong> while the application is running.</div>
+
+<style>
+.fabric-route-map {
+  display: grid;
+  grid-template-columns: 1.15fr 2.1rem 1.3fr 2.1rem 1.65fr;
+  gap: 0.65rem;
+  margin-top: 1rem;
+}
+.route-column {
+  display: grid;
+  grid-template-rows: 1.25rem repeat(3, minmax(3.3rem, auto));
+  gap: 0.45rem;
+}
+.route-heading {
+  color: #64748b;
+  font-size: 0.65rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.route-source,
+.route-step,
+.route-detail-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.7rem;
+  background: #f8fafc;
+  padding: 0.55rem 0.75rem;
+}
+.route-source b,
+.route-step b,
+.route-detail-card b {
+  color: #0f172a;
+  font-size: 0.95rem;
+}
+.route-source small,
+.route-step small,
+.route-detail-card small {
+  margin-top: 0.2rem;
+  color: #64748b;
+  font-size: 0.68rem;
+  line-height: 1.15;
+}
+.notebook-source { border-color: #93c5fd; background: #eff6ff; }
+.job-source { border-color: #c4b5fd; background: #f5f3ff; }
+.monitor-source { border-color: #86efac; background: #f0fdf4; }
+.recent-step { border-color: #93c5fd; background: #eff6ff; }
+.monitor-step { border-color: #86efac; background: #f0fdf4; }
+.route-detail-card { border-color: #fbbf24; background: #fffbeb; }
+.route-arrows {
+  color: #94a3b8;
+  font-size: 1.8rem;
+  font-weight: 800;
+  text-align: center;
+}
+.route-arrows > div:not(.route-heading) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lens-branch {
+  display: grid;
+  grid-template-columns: auto 1.35fr auto 1fr auto 1.25fr;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 0.8rem;
+  border-top: 1px solid #fbbf24;
+  border-bottom: 1px solid #fbbf24;
+  background: #fffbeb;
+  padding: 0.65rem 0.75rem;
+}
+.branch-label {
+  color: #92400e;
+  font-size: 0.63rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+.branch-source {
+  border: 1px solid #fbbf24;
+  border-radius: 0.55rem;
+  background: white;
+  padding: 0.5rem 0.65rem;
+  color: #78350f;
+  font-size: 0.85rem;
+  font-weight: 800;
+  text-align: center;
+}
+.branch-arrow,
+.lens-or {
+  color: #b45309;
+  font-size: 1.35rem;
+  font-weight: 800;
+  text-align: center;
+}
+.lens-or { font-size: 0.72rem; font-weight: 700; }
+.lens-card {
+  display: flex;
+  min-height: 3.25rem;
+  flex-direction: column;
+  justify-content: center;
+  border-radius: 0.55rem;
+  padding: 0.45rem 0.65rem;
+}
+.lens-card span {
+  font-size: 0.6rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+.lens-card b { font-size: 0.9rem; }
+.lens-card small { color: #475569; font-size: 0.65rem; }
+.live-lens { border: 1px solid #86efac; background: #f0fdf4; color: #166534; }
+.ended-lens { border: 1px solid #c4b5fd; background: #f5f3ff; color: #5b21b6; }
+.notebook-shortcut {
+  margin-top: 0.65rem;
+  color: #475569;
+  font-size: 0.78rem;
+  text-align: center;
+}
+.notebook-shortcut strong { color: #166534; }
+</style>
+
+<!--
+Accuracy check against the Microsoft Learn navigation:
+- Recent runs is opened from the notebook or Spark job definition item context. A notebook also exposes Run → All runs.
+- The Monitor hub is a parallel entry point: select an application there; it does not open a Recent runs pane.
+- From application details, the action is Spark UI for a running application and Spark history server for an ended one (Completed, Failed, Canceled, or Stopped).
+- Notebook cell progress also has a direct Spark UI shortcut while the application is running. For Spark job definitions, use Recent runs or Monitor → application details before choosing the state-based lens.
+
+Sources:
+https://learn.microsoft.com/en-us/fabric/data-engineering/spark-monitoring-overview
+https://learn.microsoft.com/en-us/fabric/data-engineering/spark-item-recent-runs
+https://learn.microsoft.com/en-us/fabric/data-engineering/spark-detail-monitoring
+https://learn.microsoft.com/en-us/fabric/data-engineering/apache-spark-history-server
+-->
+
+---
 layout: default
 clicks: 6
 ---
 
 # The Detective's Field Guide
 
-<div class="text-xl opacity-70">One path. Every case.</div>
+<div class="text-xl opacity-70">Follow the clues...</div>
 
 <DetectiveFieldGuide :active="$clicks" />
 
 <div class="mt-8 text-center text-2xl font-semibold">
-  <span v-if="$clicks === 0">A slow job is a symptom. Walk the evidence.</span>
-  <span v-else-if="$clicks < 6">Do not skip ahead to a favorite tuning knob.</span>
+  <span v-if="$clicks === 0">A crime has been committed. Follow the evidence.</span>
+  <span v-else-if="$clicks < 6">Put each clue under a microscope.</span>
   <span v-else>A case ends with one testable hypothesis.</span>
 </div>
 
 <!--
-We have enough Spark vocabulary now. We need a route through the evidence.
+We have enough Spark vocabulary now. We need a route through the evidence. A crime has been committed -> Your Spark job execution was killed by you.
 
 I will use this field guide for every case in the rest of the session. The data and symptoms will change, but these six moves stay fixed.
 

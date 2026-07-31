@@ -25,16 +25,18 @@ Do not include ingestion in recorded timings.
 
 ## Running the cases
 
-Each case accepts a mode as a positional script argument. With no recognized mode, it runs every mode in order.
+Case 0 is split into three standalone scripts so each can be uploaded as its own Fabric Spark Job Definition. Cases 1–3 still accept a mode as a positional script argument; with no recognized mode, they run every mode in order.
 
-| Script | Modes |
+| Script | Run |
 |---|---|
-| `case0_data_growth_regression.py` | `baseline`, `bad`, `fixed`, `all` |
+| `case0_data_growth_regression/baseline.py` | 2024 October–December baseline |
+| `case0_data_growth_regression/bad.py` | Full history with eight shuffle partitions |
+| `case0_data_growth_regression/fixed.py` | Full history with at least 256 shuffle partitions |
 | `case1_data_skew.py` | `bad`, `fixed`, `all` |
 | `case2_excessive_shuffle.py` | `bad`, `fixed`, `all` |
 | `case3_poor_parallelism.py` | `bad`, `fixed`, `all` |
 
-Run modes as separate Spark applications when capturing the History Server. This avoids one application mixing the comparison and gives each run a clean SQL plan and timeline.
+Run each script as a separate Spark application when capturing the History Server. This avoids one application mixing the comparison and gives each run a clean SQL plan and timeline.
 
 ## Case 0: data growth and spill
 
