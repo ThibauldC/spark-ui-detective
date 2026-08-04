@@ -1563,37 +1563,255 @@ Set up Case 1: return to the 12-minute run that became a 55-minute run. We alrea
 
 
 ---
+clicks: 3
+zoom: 0.85
+---
 
-# Case 0: writing to disk
+# Case 0: the growing shuffle
 
-<DetectiveFieldGuide :active="0" />
+<DetectiveFieldGuide :active="$clicks + 3" compact />
 
-<div class="mt-8 grid grid-cols-3 gap-5 text-center">
-  <div class="case-card"><b>Case 1</b><span>Data grew and spilled</span></div>
-  <div class="case-card"><b>Case 2</b><span>One straggler hid the skew</span></div>
-  <div class="case-card"><b>Case 3</b><span>Too much moving, too few hands</span></div>
+<div v-if="$clicks === 0" class="mt-3">
+  <div class="text-sm font-bold tracking-widest text-violet-700">3 · LOCALIZE THE COST</div>
+  <div class="grid grid-cols-[1.7fr_0.8fr] gap-6 mt-2">
+    <div class="case0-stage-list">
+      <div class="case0-stage-row header"><span>Stage</span><span>Wall time</span><span>Tasks</span><span>Shuffle</span><span>Disk spill</span></div>
+      <div class="case0-stage-row"><span>Other completed stages</span><span>10.9s</span><span>172</span><span>negligible</span><span>0</span></div>
+      <div class="case0-stage-row scan"><span><b>11</b> · scan + partial aggregate</span><span><b>72.9s</b></span><span>53</span><span>7.93 GB write</span><span>0</span></div>
+      <div class="case0-stage-row suspect"><span><b>13</b> · final aggregate + write</span><span><b>109.7s</b></span><span><b>8</b></span><span>7.93 GB read</span><span><b>7.33 GB</b></span></div>
+    </div>
+    <div class="case0-verdict violet">
+      <span>DOMINANT PATH</span>
+      <b>182.6s</b>
+      <small>of the 217.2s application runtime</small>
+      <p>Open Stage 13 first. It lasts longest and is the only stage that spills to disk.</p>
+    </div>
+  </div>
 </div>
 
-<div class="mt-10 text-center text-3xl font-bold">Reset to Find. Follow the clues.</div>
+<div v-else-if="$clicks === 1" class="mt-3">
+  <div class="text-sm font-bold tracking-widest text-rose-700">4 · INSPECT THE TASK SHAPE</div>
+  <div class="grid grid-cols-[1.6fr_0.75fr] gap-6 mt-2">
+    <div class="case0-task-chart">
+      <div class="case0-task-head"><span>Task</span><span>Duration</span><span>Shuffle read</span><span>Disk spill</span></div>
+      <div class="case0-task-row"><b>0</b><span><i style="width:94%"></i>103.1s</span><span>1.01 GB</span><span>0.93 GB</span></div>
+      <div class="case0-task-row"><b>1</b><span><i style="width:84%"></i>92.0s</span><span>0.84 GB</span><span>0.78 GB</span></div>
+      <div class="case0-task-row"><b>2</b><span><i style="width:89%"></i>97.4s</span><span>0.92 GB</span><span>0.85 GB</span></div>
+      <div class="case0-task-row"><b>3</b><span><i style="width:98%"></i>107.2s</span><span>1.10 GB</span><span>1.01 GB</span></div>
+      <div class="case0-task-row"><b>4</b><span><i style="width:93%"></i>102.1s</span><span>1.00 GB</span><span>0.92 GB</span></div>
+      <div class="case0-task-row"><b>5</b><span><i style="width:90%"></i>98.7s</span><span>0.95 GB</span><span>0.88 GB</span></div>
+      <div class="case0-task-row"><b>6</b><span><i style="width:100%"></i>109.6s</span><span>1.11 GB</span><span>1.02 GB</span></div>
+      <div class="case0-task-row"><b>7</b><span><i style="width:95%"></i>103.9s</span><span>1.01 GB</span><span>0.93 GB</span></div>
+    </div>
+    <div class="case0-verdict rose">
+      <span>THE SHAPE</span>
+      <b>92–110s</b>
+      <small>all 8 tasks spill</small>
+      <p>No long tail. Every reducer carries about 1 GB of shuffle input and writes temporary data to disk.</p>
+    </div>
+  </div>
+</div>
+
+<div v-else-if="$clicks === 2" class="mt-3">
+  <div class="text-sm font-bold tracking-widest text-amber-700">5 · CORRELATE THE CLUES</div>
+  <div class="case0-plan mt-3">
+    <div><b>Scan</b><small>259.3M rows</small></div><i>→</i>
+    <div><b>HashAggregate</b><small>partial deduplication</small></div><i>→</i>
+    <div class="exchange"><b>Exchange</b><small>hashpartitioning(PU, DO, <strong>8</strong>)</small></div><i>→</i>
+    <div><b>HashAggregate</b><small>final route statistics</small></div>
+  </div>
+  <div class="grid grid-cols-3 gap-4 mt-5">
+    <div class="case0-clue"><span>SQL PLAN</span><b>25.1 GiB shuffle stage</b><small>The Exchange fixes the reducer count at 8.</small></div>
+    <div class="case0-clue"><span>STAGE 13</span><b>44.44 GB memory spill</b><small>7.33 GB reaches disk; fetch wait is ~0s.</small></div>
+    <div class="case0-clue"><span>EXECUTORS</span><b>1 executor · 8 cores</b><small>All eight reducers run; the work is not waiting for task slots.</small></div>
+  </div>
+  <div class="mt-5 text-center text-xl font-semibold">The plan creates eight oversized reducer partitions; the task metrics show the cost.</div>
+</div>
+
+<div v-else class="mt-3">
+  <div class="text-sm font-bold tracking-widest text-emerald-700">6 · TEST ONE HYPOTHESIS</div>
+  <div class="case0-hypothesis mt-3">
+    <div class="evidence"><span>EVIDENCE</span><b>259M rows ÷ 8 reducers</b><small>≈ 1 GB shuffle input and ≈ 0.9 GB disk spill per task</small></div>
+    <i>→</i>
+    <div class="hypothesis"><span>HYPOTHESIS</span><b>The shuffle is under-partitioned</b><small>Each aggregation task crosses its memory threshold.</small></div>
+    <i>→</i>
+    <div class="test"><span>ONE CHANGE</span><b>8 → at least 256 partitions</b><small>Keep the full input and business logic unchanged.</small></div>
+  </div>
+  <div class="case0-compare mt-6">
+    <span>RERUN AND COMPARE</span>
+    <b>Stage duration</b><b>Disk spill</b><b>Shuffle per task</b><b>Task distribution</b>
+  </div>
+</div>
+
+<style>
+.case0-stage-list,
+.case0-task-chart {
+  overflow: hidden;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.9rem;
+  background: white;
+}
+.case0-stage-row {
+  display: grid;
+  grid-template-columns: 1.75fr 0.65fr 0.5fr 0.9fr 0.7fr;
+  align-items: center;
+  border-top: 1px solid #e2e8f0;
+  padding: 0.9rem 0.8rem;
+  color: #334155;
+  font-size: 0.76rem;
+}
+.case0-stage-row.header {
+  border: 0;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 0.63rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.case0-stage-row.scan { background: #eff6ff; }
+.case0-stage-row.suspect { border-left: 0.35rem solid #7c3aed; background: #faf5ff; color: #4c1d95; }
+.case0-verdict {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  border: 1px solid;
+  border-radius: 0.9rem;
+  padding: 1.2rem;
+  text-align: center;
+}
+.case0-verdict.violet { border-color: #c4b5fd; background: #f5f3ff; color: #5b21b6; }
+.case0-verdict.rose { border-color: #fda4af; background: #fff1f2; color: #be123c; }
+.case0-verdict > span,
+.case0-clue > span,
+.case0-hypothesis span,
+.case0-compare > span {
+  font-size: 0.65rem;
+  font-weight: 900;
+  letter-spacing: 0.11em;
+}
+.case0-verdict > b { margin-top: 0.6rem; font-size: 2rem; }
+.case0-verdict small { font-size: 0.75rem; }
+.case0-verdict p { margin: 1rem 0 0; color: #475569; font-size: 0.82rem; line-height: 1.3; }
+.case0-task-head,
+.case0-task-row {
+  display: grid;
+  grid-template-columns: 0.35fr 2fr 0.8fr 0.75fr;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.32rem 0.7rem;
+  color: #334155;
+  font-size: 0.68rem;
+}
+.case0-task-head { background: #f1f5f9; color: #64748b; font-size: 0.6rem; font-weight: 900; text-transform: uppercase; }
+.case0-task-row { border-top: 1px solid #f1f5f9; }
+.case0-task-row > span:first-of-type { position: relative; height: 1.1rem; border-radius: 0.25rem; background: #f1f5f9; line-height: 1.1rem; text-align: right; }
+.case0-task-row i { position: absolute; inset: 0 auto 0 0; z-index: 0; border-radius: 0.25rem; background: #fda4af; }
+.case0-task-row span { isolation: isolate; }
+.case0-plan {
+  display: grid;
+  grid-template-columns: 1fr auto 1.2fr auto 1.3fr auto 1.2fr;
+  align-items: center;
+  gap: 0.7rem;
+}
+.case0-plan > div {
+  border: 1px solid #cbd5e1;
+  border-radius: 0.75rem;
+  background: white;
+  padding: 0.75rem;
+  text-align: center;
+}
+.case0-plan > div.exchange { border: 2px solid #f59e0b; background: #fffbeb; color: #92400e; }
+.case0-plan small { display: block; margin-top: 0.25rem; color: #64748b; font-size: 0.67rem; }
+.case0-plan > i { color: #94a3b8; font-size: 1.6rem; font-style: normal; font-weight: 900; }
+.case0-clue { border: 1px solid #cbd5e1; border-radius: 0.8rem; background: #f8fafc; padding: 0.9rem; }
+.case0-clue > span { color: #64748b; }
+.case0-clue b { display: block; margin-top: 0.35rem; color: #0f172a; font-size: 1rem; }
+.case0-clue small { display: block; margin-top: 0.3rem; color: #64748b; font-size: 0.72rem; }
+.case0-hypothesis {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto 1fr;
+  align-items: stretch;
+  gap: 0.7rem;
+}
+.case0-hypothesis > div { display: flex; min-height: 12rem; flex-direction: column; justify-content: center; border: 2px solid #cbd5e1; border-radius: 1rem; padding: 1rem; text-align: center; }
+.case0-hypothesis > i { align-self: center; color: #94a3b8; font-size: 2rem; font-style: normal; }
+.case0-hypothesis .evidence { background: #f8fafc; }
+.case0-hypothesis .hypothesis { border-color: #f59e0b; background: #fffbeb; }
+.case0-hypothesis .test { border-color: #22c55e; background: #f0fdf4; }
+.case0-hypothesis b { margin-top: 0.6rem; font-size: 1.1rem; }
+.case0-hypothesis small { margin-top: 0.5rem; color: #64748b; font-size: 0.75rem; }
+.case0-compare { display: grid; grid-template-columns: 1.2fr repeat(4, 1fr); gap: 0.5rem; align-items: center; border-radius: 0.75rem; background: #0f172a; padding: 0.8rem 1rem; color: white; text-align: center; }
+.case0-compare > span { color: #94a3b8; text-align: left; }
+.case0-compare b { font-size: 0.75rem; }
+</style>
 
 <!--
-Remember wide vs narrow transformations
+Case 0 uses the completed bad run, so every value shown here is available in Spark History Server. History Server reconstructs these Spark UI views from the application's event log.
 
-narrow: performs operation called pipelining -> when you specify multiple filters they are performed in memory
-wide: Spark needs to write the results to disk
+3 · LOCALIZE
+Open Spark History Server → Stages. In Completed Stages, sort by Duration.
+Stage 13 lasts 109.7 seconds and has only 8 tasks. Its row shows 7.93 GB shuffle read and 7.33 GB disk spill. Stage 11 lasts 72.9 seconds and writes the same 7.93 GB shuffle. Together these stages consume 182.6 seconds of the 217.2-second application runtime.
+Open Stage 13 because it is the longest stage and the spill appears there. Stage IDs can change between runs, so identify it by duration, task count, and shuffle metrics rather than memorizing 13.
+
+[click]
+4 · INSPECT
+On the Stage 13 detail page, use Summary Metrics for Completed Tasks and the Tasks table. Sort by Duration, Shuffle Read Size, and Disk Spill.
+
+A reducer is not a separate Spark process here. It is a task on the read side of the Exchange. The upstream tasks divide their output into eight shuffle partitions; Stage 13 starts one reducer task for each partition. Each reducer fetches all records assigned to its partition and runs the final deduplication and aggregation for those records.
+
+The eight reducers last 92.0 to 109.6 seconds. Each reads 0.84 to 1.11 GB of shuffle data and spills 0.78 to 1.02 GB to disk. The narrow ranges matter: one task does not hold the stage open. All eight tasks are overloaded.
+
+One GB of shuffle input is not automatically bad. It is the serialized shuffle size, not the task's full in-memory footprint. Spark decodes those rows, stores keys and aggregation buffers in a hash table, and pays object and bookkeeping overhead. This deduplication has many distinct keys, so the reducer must retain a large amount of aggregation state instead of processing each row and forgetting it. Eight reducers also run concurrently and share the executor's execution-memory pool.
+
+When a reducer cannot grow its aggregation state within its share of execution memory, Spark spills part of that state to temporary local files to free memory and continue. It later reads and merges those files to finish the aggregate. That extra serialization, disk I/O, and merging makes the stage slower. This is separate from the normal shuffle files produced at the Exchange: the Disk Spill metric records extra temporary I/O caused by memory pressure.
+
+The stage summary reports 44.44 GB memory spill and 7.33 GB disk spill. Memory spill estimates the in-memory size of the data Spark evicted, which is why it can exceed the 7.93 GB serialized shuffle input. Disk spill measures the bytes written to temporary files and confirms that the aggregation crossed its memory threshold.
+
+[click]
+5 · CORRELATE
+Open Spark History Server → SQL and select the write execution. In the final physical plan, follow the scan through HashAggregate to Exchange. The Exchange details show hashpartitioning on pickup and drop-off location with 8 partitions. The shuffle stage carries 259.3 million rows and an estimated 25.1 GiB.
+Return to Stage 13 to connect that Exchange to 8 reducer tasks, 44.44 GB memory spill, and 7.33 GB disk spill. Fetch wait is about zero, so network waiting does not explain the stage duration.
+In Executors, executor 1 has 8 cores. All eight reducer tasks can run at once. Increasing the partition count will create smaller tasks that run in waves; it does not require more cores to reduce each task's aggregation state.
+
+[click]
+6 · TEST
+State the hypothesis: the historical input grew, but the shuffle stayed at eight partitions. Each reducer now owns too much aggregation state and spills to disk.
+Run the fixed application with the same full-history input and business logic, changing only spark.sql.shuffle.partitions from 8 to at least 256. Compare the dominant stage's duration, disk spill, shuffle read per task, and task distribution in History Server. A shorter stage with much less disk spill supports the hypothesis. If those metrics stay flat, reject it and return to the task evidence.
+-->
+
+---
+
+# Case 0: video placeholder
+
+<div class="video-placeholder">
+  <div class="video-icon">▶</div>
+  <h2>Drop the Case 0 walkthrough here</h2>
+  <p>Replace this placeholder with the recorded Fabric Spark History Server demo.</p>
+  <code>case-0-bad-run.mp4</code>
+</div>
+
+<!--
+Placeholder for the Case 0 recording. Add the video asset and replace the box with:
+
+<video controls class="case-video" src="./videos/case-0-bad-run.mp4"></video>
+
+Keep the recording focused on the same breadcrumb: stage → tasks → SQL plan → executors.
 -->
 
 <style>
-.case-card {
+.video-placeholder {
   display: flex;
-  min-height: 7.5rem;
+  min-height: 27rem;
   flex-direction: column;
+  align-items: center;
   justify-content: center;
-  border: 1px solid #cbd5e1;
-  border-radius: 1rem;
-  background: #f8fafc;
-  padding: 1rem;
+  border: 2px dashed #94a3b8;
+  border-radius: 1.25rem;
+  background: repeating-linear-gradient(135deg, #f8fafc, #f8fafc 0.8rem, #f1f5f9 0.8rem, #f1f5f9 1.6rem);
+  text-align: center;
 }
-.case-card b { color: #2563eb; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.08em; }
-.case-card span { margin-top: 0.5rem; font-size: 1.05rem; font-weight: 700; }
+.video-icon { color: #2563eb; font-size: 3.5rem; }
+.video-placeholder h2 { margin: 0.6rem 0 0; color: #1e3a8a; }
+.video-placeholder p { color: #64748b; }
+.video-placeholder code { color: #475569; }
 </style>
