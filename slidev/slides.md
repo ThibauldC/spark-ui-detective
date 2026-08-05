@@ -1635,7 +1635,7 @@ zoom: 0.85
     <i>→</i>
     <div class="hypothesis"><span>HYPOTHESIS</span><b>The shuffle is under-partitioned</b><small>Each aggregation task crosses its memory threshold.</small></div>
     <i>→</i>
-    <div class="test"><span>ONE CHANGE</span><b>8 → at least 256 partitions</b><small>Keep the full input and business logic unchanged.</small></div>
+    <div class="test"><span>ONE CHANGE</span><b>8 → at least 256 partitions</b><small>Eight cores process the smaller tasks in waves. Same input, smaller per-task state.</small></div>
   </div>
   <div class="case0-compare mt-6">
     <span>RERUN AND COMPARE</span>
@@ -1776,6 +1776,11 @@ In Executors, executor 1 has 8 cores. All eight reducer tasks can run at once. I
 [click]
 6 · TEST
 State the hypothesis: the historical input grew, but the shuffle stayed at eight partitions. Each reducer now owns too much aggregation state and spills to disk.
+
+Why do more partitions help when the executor count stays the same? Executors determine how many tasks run at once; partitions determine how much data and aggregation state each task owns. With one 8-core executor and 8 partitions, all eight large tasks run together, and each competes for execution memory while holding about one eighth of the shuffle. With 256 partitions, the executor still runs only eight tasks at once, but each task owns roughly one thirty-second as much data. Spark processes the 256 smaller tasks in about 32 waves. Completed tasks release their memory before the next wave starts.
+
+The change does not add CPU or reduce the total input. It trades extra task-scheduling overhead for a much smaller peak memory requirement per task. Avoiding repeated spill and merge I/O can save more time than those extra tasks cost. More is not always better: partitions that are too small add scheduling and file overhead. At least 256 is the hypothesis for this run, not a universal Spark setting.
+
 Run the fixed application with the same full-history input and business logic, changing only spark.sql.shuffle.partitions from 8 to at least 256. Compare the dominant stage's duration, disk spill, shuffle read per task, and task distribution in History Server. A shorter stage with much less disk spill supports the hypothesis. If those metrics stay flat, reject it and return to the task evidence.
 -->
 
@@ -1784,19 +1789,9 @@ Run the fixed application with the same full-history input and business logic, c
 # Case 0: video placeholder
 
 <div class="video-placeholder">
-  <div class="video-icon">▶</div>
-  <h2>Drop the Case 0 walkthrough here</h2>
-  <p>Replace this placeholder with the recorded Fabric Spark History Server demo.</p>
-  <code>case-0-bad-run.mp4</code>
+  <video controls class="case-video" src="./videos/case0_recording.mp4"></video>
 </div>
 
-<!--
-Placeholder for the Case 0 recording. Add the video asset and replace the box with:
-
-<video controls class="case-video" src="./videos/case-0-bad-run.mp4"></video>
-
-Keep the recording focused on the same breadcrumb: stage → tasks → SQL plan → executors.
--->
 
 <style>
 .video-placeholder {
@@ -1810,6 +1805,13 @@ Keep the recording focused on the same breadcrumb: stage → tasks → SQL plan 
   background: repeating-linear-gradient(135deg, #f8fafc, #f8fafc 0.8rem, #f1f5f9 0.8rem, #f1f5f9 1.6rem);
   text-align: center;
 }
+.case-video {
+  display: block;
+  width: 100%;
+  max-height: 24rem;
+  object-fit: contain;
+}
+
 .video-icon { color: #2563eb; font-size: 3.5rem; }
 .video-placeholder h2 { margin: 0.6rem 0 0; color: #1e3a8a; }
 .video-placeholder p { color: #64748b; }
