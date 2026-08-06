@@ -1817,3 +1817,212 @@ Run the fixed application with the same full-history input and business logic, c
 .video-placeholder p { color: #64748b; }
 .video-placeholder code { color: #475569; }
 </style>
+
+---
+clicks: 3
+zoom: 0.85
+---
+
+# Case 1: the standard-rate hot key
+
+<DetectiveFieldGuide :active="$clicks + 3" compact />
+
+<div v-if="$clicks === 0" class="mt-3">
+  <div class="text-sm font-bold tracking-widest text-violet-700">3 · LOCALIZE THE COST</div>
+  <div class="grid grid-cols-[1.7fr_0.8fr] gap-6 mt-2">
+    <div class="case1-stage-list">
+      <div class="case1-stage-row header"><span>Evidence</span><span>Wall time</span><span>Tasks</span><span>Shuffle</span></div>
+      <div class="case1-stage-row"><span>Main SQL write execution</span><span><b>152.2s</b></span><span>—</span><span>—</span></div>
+      <div class="case1-stage-row scan"><span><b>Stage 4</b> · fact scan + exchange</span><span>32.5s</span><span>29</span><span>3.63 GiB write</span></div>
+      <div class="case1-stage-row suspect"><span><b>Stage 8</b> · join + parquet write</span><span><b>118.2s</b></span><span><b>256</b></span><span><b>3.63 GiB read</b></span></div>
+    </div>
+    <div class="case1-verdict violet">
+      <span>DOMINANT STAGE</span>
+      <b>118.2s</b>
+      <small>78% of the 152.2s SQL execution</small>
+      <p>Open Stage 8. The scan finishes; the final join stage holds the application open.</p>
+    </div>
+  </div>
+</div>
+
+<div v-else-if="$clicks === 1" class="mt-3">
+  <div class="text-sm font-bold tracking-widest text-rose-700">4 · INSPECT THE TASK SHAPE</div>
+  <div class="grid grid-cols-[1.6fr_0.75fr] gap-6 mt-2">
+    <div class="case1-task-chart">
+      <div class="case1-task-head"><span>Partition</span><span>Duration</span><span>Shuffle read</span><span>Rows read</span></div>
+      <div class="case1-task-row hot"><b>75</b><span><i style="width:100%"></i>118.12s</span><span>3.24 GiB</span><span>105.72M</span></div>
+      <div class="case1-task-row"><b>96</b><span><i style="width:13%"></i>15.01s</span><span>222.4 MiB</span><span>6.77M</span></div>
+      <div class="case1-task-row"><b>143</b><span><i style="width:10%"></i>11.97s</span><span>112.9 MiB</span><span>4.38M</span></div>
+      <div class="case1-task-row median"><b>Median</b><span><i style="width:1%"></i>0.153s</span><span>0 B</span><span>0</span></div>
+    </div>
+    <div class="case1-verdict rose">
+      <span>THE LONG TAIL</span>
+      <b>772×</b>
+      <small>max duration ÷ median</small>
+      <p>Partition 75 receives 88.7% of all join rows. Only 8 of 256 tasks read any shuffle data.</p>
+    </div>
+  </div>
+</div>
+
+<div v-else-if="$clicks === 2" class="mt-3">
+  <div class="text-sm font-bold tracking-widest text-amber-700">5 · CORRELATE THE CLUES</div>
+  <div class="case1-plan mt-3">
+    <div><b>Scan</b><small>119.14M rows</small></div><i>→</i>
+    <div class="exchange"><b>Exchange</b><small>hash(fare_rule, 256)</small></div><i>→</i>
+    <div><b>SortMergeJoin</b><small>LeftOuter</small></div><i>→</i>
+    <div><b>WriteFiles</b><small>119.14M rows</small></div>
+  </div>
+  <div class="grid grid-cols-3 gap-4 mt-5">
+    <div class="case1-clue"><span>DIAGNOSIS · DATA SKEW</span><b>3,319.71 MB max</b><small>versus 14.54 MB mean task data read</small></div>
+    <div class="case1-clue"><span>DIAGNOSIS · TIME SKEW</span><b>118.12s max</b><small>versus 0.79s mean task duration</small></div>
+    <div class="case1-clue"><span>STAGE 8</span><b>0 spill · 0 fetch wait</b><small>The straggler is processing the hot partition, not waiting on disk or network.</small></div>
+  </div>
+  <div class="mt-5 text-center text-xl font-semibold">The plan groups one hot key; the task table and Fabric Diagnosis show where it lands.</div>
+</div>
+
+<div v-else class="mt-3">
+  <div class="text-sm font-bold tracking-widest text-emerald-700">6 · TEST ONE HYPOTHESIS</div>
+  <div class="case1-hypothesis mt-3">
+    <div class="evidence"><span>EVIDENCE</span><b>105.72M of 119.14M rows</b><small>88.7% of join rows land in partition 75.</small></div>
+    <i>→</i>
+    <div class="hypothesis"><span>HYPOTHESIS</span><b><code>STANDARD</code> is the hot key</b><small>Hashing <code>fare_rule</code> alone sends it to one reducer.</small></div>
+    <i>→</i>
+    <div class="test"><span>ONE CHANGE</span><b>Add 8,192 deterministic salts</b><small>Replicate the 8-row rule table across salts; keep 256 shuffle partitions.</small></div>
+  </div>
+  <div class="case1-compare mt-6">
+    <span>RERUN AND COMPARE</span>
+    <b>Stage duration</b><b>Max ÷ mean data</b><b>Max task time</b><b>119,136,044 rows</b>
+  </div>
+</div>
+
+<style>
+.case1-stage-list,
+.case1-task-chart {
+  overflow: hidden;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.9rem;
+  background: white;
+}
+.case1-stage-row {
+  display: grid;
+  grid-template-columns: 1.8fr 0.65fr 0.5fr 0.9fr;
+  align-items: center;
+  border-top: 1px solid #e2e8f0;
+  padding: 0.95rem 0.85rem;
+  color: #334155;
+  font-size: 0.78rem;
+}
+.case1-stage-row.header {
+  border: 0;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 0.63rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.case1-stage-row.scan { background: #eff6ff; }
+.case1-stage-row.suspect { border-left: 0.35rem solid #7c3aed; background: #faf5ff; color: #4c1d95; }
+.case1-verdict {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  border: 1px solid;
+  border-radius: 0.9rem;
+  padding: 1.2rem;
+  text-align: center;
+}
+.case1-verdict.violet { border-color: #c4b5fd; background: #f5f3ff; color: #5b21b6; }
+.case1-verdict.rose { border-color: #fda4af; background: #fff1f2; color: #be123c; }
+.case1-verdict > span,
+.case1-clue > span,
+.case1-hypothesis span,
+.case1-compare > span {
+  font-size: 0.65rem;
+  font-weight: 900;
+  letter-spacing: 0.11em;
+}
+.case1-verdict > b { margin-top: 0.6rem; font-size: 2rem; }
+.case1-verdict small { font-size: 0.75rem; }
+.case1-verdict p { margin: 1rem 0 0; color: #475569; font-size: 0.82rem; line-height: 1.3; }
+.case1-task-head,
+.case1-task-row {
+  display: grid;
+  grid-template-columns: 0.55fr 2fr 0.85fr 0.75fr;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  color: #334155;
+  font-size: 0.72rem;
+}
+.case1-task-head { background: #f1f5f9; color: #64748b; font-size: 0.6rem; font-weight: 900; text-transform: uppercase; }
+.case1-task-row { border-top: 1px solid #f1f5f9; }
+.case1-task-row.hot { background: #fff1f2; color: #9f1239; }
+.case1-task-row.median { color: #64748b; }
+.case1-task-row > span:first-of-type { position: relative; height: 1.2rem; border-radius: 0.25rem; background: #f1f5f9; line-height: 1.2rem; text-align: right; }
+.case1-task-row i { position: absolute; inset: 0 auto 0 0; z-index: 0; border-radius: 0.25rem; background: #93c5fd; }
+.case1-task-row.hot i { background: #fb7185; }
+.case1-task-row span { isolation: isolate; }
+.case1-plan {
+  display: grid;
+  grid-template-columns: 1fr auto 1.25fr auto 1.15fr auto 1fr;
+  align-items: center;
+  gap: 0.7rem;
+}
+.case1-plan > div {
+  border: 1px solid #cbd5e1;
+  border-radius: 0.75rem;
+  background: white;
+  padding: 0.75rem;
+  text-align: center;
+}
+.case1-plan > div.exchange { border: 2px solid #f59e0b; background: #fffbeb; color: #92400e; }
+.case1-plan small { display: block; margin-top: 0.25rem; color: #64748b; font-size: 0.67rem; }
+.case1-plan > i { color: #94a3b8; font-size: 1.6rem; font-style: normal; font-weight: 900; }
+.case1-clue { border: 1px solid #cbd5e1; border-radius: 0.8rem; background: #f8fafc; padding: 0.9rem; }
+.case1-clue > span { color: #64748b; }
+.case1-clue b { display: block; margin-top: 0.35rem; color: #0f172a; font-size: 1rem; }
+.case1-clue small { display: block; margin-top: 0.3rem; color: #64748b; font-size: 0.72rem; }
+.case1-hypothesis {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto 1fr;
+  align-items: stretch;
+  gap: 0.7rem;
+}
+.case1-hypothesis > div { display: flex; min-height: 12rem; flex-direction: column; justify-content: center; border: 2px solid #cbd5e1; border-radius: 1rem; padding: 1rem; text-align: center; }
+.case1-hypothesis > i { align-self: center; color: #94a3b8; font-size: 2rem; font-style: normal; }
+.case1-hypothesis .evidence { background: #f8fafc; }
+.case1-hypothesis .hypothesis { border-color: #f59e0b; background: #fffbeb; }
+.case1-hypothesis .test { border-color: #22c55e; background: #f0fdf4; }
+.case1-hypothesis b { margin-top: 0.6rem; font-size: 1.1rem; }
+.case1-hypothesis small { margin-top: 0.5rem; color: #64748b; font-size: 0.75rem; }
+.case1-compare { display: grid; grid-template-columns: 1.2fr repeat(4, 1fr); gap: 0.5rem; align-items: center; border-radius: 0.75rem; background: #0f172a; padding: 0.8rem 1rem; color: white; text-align: center; }
+.case1-compare > span { color: #94a3b8; text-align: left; }
+.case1-compare b { font-size: 0.75rem; }
+</style>
+
+<!--
+Case 1 uses the completed bad run in case_1_logs. The values on this slide come from its Spark event records: application_1786010291340_0001, SQL execution 1, and its final join stage. Stage and task IDs can change on a rerun, so use the descriptions and metrics below rather than memorizing the numbers.
+
+3 · LOCALIZE
+Open the completed application in Spark History Server. In SQL, select the execution named “CASE 1 BAD: standard-rate hot join key.” The event log records a 152.2-second write execution and a final physical plan ending in WriteFiles.
+Open Stages and sort Completed Stages by Duration. Stage 8 is the parquet join-and-write stage: 256 tasks, 118.2 seconds, and 3.63 GiB of shuffle read. It consumes about 78% of the SQL execution. Stage 4 scans 119,136,044 fact rows and writes the same 3.63 GiB shuffle in 32.5 seconds, so the scan completes; the final stage explains the long tail.
+Identify the stage by its 256 tasks, shuffle read, and parquet call site rather than by ID. Stage numbers may differ in another application.
+
+[click]
+4 · INSPECT
+Open Stage 8. First look at the event timeline: Task 89, for partition 75, starts with the first wave and extends almost to the end of the stage while the other task bars disappear.
+In Summary Metrics for Completed Tasks, compare maximum, mean, and median duration. Then use the Tasks table and sort by Duration and Shuffle Read Size. Partition 75 lasts 118.12 seconds, reads 3.24 GiB and 105,720,908 records, and writes 105,720,907 output rows. The median task lasts 0.153 seconds, making the maximum 772 times the median.
+Only eight of the 256 tasks have nonzero shuffle read because the join key has only eight rule values. That alone is not the diagnosis. The decisive clue is that one partition owns 88.7% of all shuffle records; the next largest partitions read only 6.77 million and 4.38 million rows.
+
+[click]
+5 · CORRELATE
+In SQL, open the final physical plan for execution 1. Follow the fact scan to Exchange hashpartitioning(fare_rule, 256), Sort, SortMergeJoin LeftOuter, and WriteFiles. The final plan reports 119.14 million rows on the fact-side ShuffleQueryStage and only eight rows on the rule side. Broadcasting is disabled in this demo, so both sides pass through an Exchange and the shuffled join remains visible.
+Now open Diagnosis for job 5. Data Skew flags Stage 8 with 3,319.71 MB maximum task data read versus 14.54 MB mean. Time Skew flags the same stage with 118.12 seconds maximum versus 0.79 seconds mean. These values are persisted as Fabric advice events in case_1_logs; they independently confirm what the task table shows.
+Return to Stage 8 and check spill and shuffle fetch wait. Both total zero. The hot task spends 109.3 seconds of CPU time during its 118.1-second duration. In Executors, the application has one eight-core executor; after the short tasks finish, one core remains occupied by the hot partition while the other slots have no comparable work. This rules out disk spill and network wait and supports data skew at the join.
+
+[click]
+6 · TEST
+State one hypothesis: the STANDARD fare rule is shared by most Yellow Taxi rows. Hashing fare_rule alone sends all STANDARD records to one of the 256 reducer partitions, producing the 105.72-million-row task.
+Run case1_data_skew/fixed.py as a separate application. It adds one of 8,192 deterministic salts to each trip, replicates the eight-row rule dimension across those salts, and joins on fare_rule plus salt. The shuffle still has 256 partitions and the output columns and business rows stay the same. Broadcast remains disabled so this tests skew rather than changing the join into the Case 2 broadcast example.
+No fixed-run event log is included here, so do not claim a measured speedup yet. In the fixed application's History Server, compare the equivalent join stage's duration, maximum-to-mean data read, maximum task duration, and output row count. The output should remain 119,136,044 rows. A flatter distribution and shorter join stage support the hypothesis; unchanged skew rejects it.
+-->

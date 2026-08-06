@@ -25,14 +25,15 @@ Do not include ingestion in recorded timings.
 
 ## Running the cases
 
-Case 0 is split into three standalone scripts so each can be uploaded as its own Fabric Spark Job Definition. Cases 1–3 still accept a mode as a positional script argument; with no recognized mode, they run every mode in order.
+Cases 0 and 1 are split into standalone scripts so each can be uploaded as its own Fabric Spark Job Definition. Cases 2–3 still accept a mode as a positional script argument; with no recognized mode, they run every mode in order.
 
 | Script | Run |
 |---|---|
 | `case0_data_growth_regression/baseline.py` | 2024 October–December baseline |
 | `case0_data_growth_regression/bad.py` | Full history with eight shuffle partitions |
 | `case0_data_growth_regression/fixed.py` | Full history with at least 256 shuffle partitions |
-| `case1_data_skew.py` | `bad`, `fixed`, `all` |
+| `case1_data_skew/bad.py` | Sort-merge join on the standard-rate hot key |
+| `case1_data_skew/fixed.py` | Sort-merge join with a salted key |
 | `case2_excessive_shuffle.py` | `bad`, `fixed`, `all` |
 | `case3_poor_parallelism.py` | `bad`, `fixed`, `all` |
 
@@ -63,22 +64,24 @@ Stages, stage task metrics, spill metrics, and the Executors tab.
 
 ### Scenario
 
-The pipeline writes a fare extract partitioned by pricing rule. Standard-rate trips share one `STANDARD` key. Exceptional fares use rate code, pickup zone, and drop-off zone. Since standard fares dominate Yellow Taxi records, one shuffle partition receives most rows.
+A fare extract is enriched with a pricing-rule description using a sort-merge join. Standard-rate trips share one `STANDARD` key, while exceptional fares use their rate code. Since standard fares dominate Yellow Taxi records, one join partition receives most rows.
+
+Broadcasting the tiny rule dimension is deliberately disabled: that would remove this join shuffle entirely and turn the demo into Case 2. Here the comparison isolates skew within a required shuffled join.
 
 ### Evidence
 
-- Most tasks finish while one task continues.
+- Most join tasks finish while one task continues.
 - One task reads and writes far more data than the median.
-- Fabric History Server Diagnosis should flag data skew.
-- The SQL plan contains an exchange on `fare_rule`.
+- Fabric History Server Diagnosis should flag data and time skew.
+- The SQL plan contains exchanges and a sort-merge join on `fare_rule`.
 
 ### Fix
 
-The fixed run salts only `STANDARD` into 32 deterministic buckets. The output retains the same columns and `fare_rule` directories, but several tasks can write the hot directory.
+The fixed run adds one of 8,192 deterministic salts to every trip and replicates the eight-row rule dimension across those salts. Hashing thousands of salt values across 256 shuffle partitions balances the large side while preserving the same joined rows and output schema.
 
 ### Where to look
 
-Stage task distribution, shuffle read per task, SQL plan, and Diagnosis > Data Skew.
+The sort-merge join stage, task duration and shuffle read distribution, SQL plan, and Diagnosis > Data Skew.
 
 ## Case 2: excessive shuffle
 
