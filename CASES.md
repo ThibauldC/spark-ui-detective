@@ -25,7 +25,7 @@ Do not include ingestion in recorded timings.
 
 ## Running the cases
 
-Cases 0 and 1 are split into standalone scripts so each can be uploaded as its own Fabric Spark Job Definition. Cases 2–3 still accept a mode as a positional script argument; with no recognized mode, they run every mode in order.
+Each scenario is a standalone script that can be uploaded as its own Fabric Spark Job Definition.
 
 | Script | Run |
 |---|---|
@@ -34,8 +34,10 @@ Cases 0 and 1 are split into standalone scripts so each can be uploaded as its o
 | `case0_data_growth_regression/fixed.py` | Full history with at least 256 shuffle partitions |
 | `case1_data_skew/bad.py` | Sort-merge join on the standard-rate hot key |
 | `case1_data_skew/fixed.py` | Sort-merge join with a salted key |
-| `case2_excessive_shuffle.py` | `bad`, `fixed`, `all` |
-| `case3_poor_parallelism.py` | `bad`, `fixed`, `all` |
+| `case2_excessive_shuffle/bad.py` | Sort-merge join on the route dimension |
+| `case2_excessive_shuffle/fixed.py` | Broadcast hash join on the route dimension |
+| `case3_poor_parallelism/bad.py` | One gzip CSV output task |
+| `case3_poor_parallelism/fixed.py` | Parallel gzip CSV output |
 
 Run each script as a separate Spark application when capturing the History Server. This avoids one application mixing the comparison and gives each run a clean SQL plan and timeline.
 
