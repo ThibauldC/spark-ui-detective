@@ -2233,3 +2233,205 @@ State one hypothesis: Spark was forced to use a sort-merge join for a 70,225-row
 Run case2_excessive_shuffle/fixed.py as a separate application. It changes only the join hint by calling broadcast(routes). The expected physical plan contains BroadcastHashJoin and no Exchange on the trip branch before the join. The small final Exchange for groupBy(pickup_borough, dropoff_borough) should remain because broadcasting does not remove the aggregation shuffle.
 No fixed-run event log is included, so do not claim a measured speedup. Compare the join strategy, fact-side shuffle bytes, join-stage duration, joined row count, and the 64 final output rows. Removing the 5.31 GiB fact exchange while preserving the row counts supports the hypothesis. If the final plan still contains a fact-side Exchange before the join, the broadcast test did not take effect.
 -->
+
+---
+clicks: 3
+zoom: 0.85
+---
+
+# Case 3: the single-file bottleneck
+
+<DetectiveFieldGuide :active="$clicks + 3" compact />
+
+<div v-if="$clicks === 0" class="mt-3">
+  <div class="text-sm font-bold tracking-widest text-violet-700">3 · LOCALIZE THE COST</div>
+  <div class="grid grid-cols-[1.7fr_0.8fr] gap-6 mt-2">
+    <div class="case2-stage-list">
+      <div class="case2-stage-row header"><span>Evidence</span><span>Wall time</span><span>Tasks</span><span>Shuffle</span></div>
+      <div class="case2-stage-row"><span>Application</span><span><b>572.605s</b></span><span>53 total</span><span>—</span></div>
+      <div class="case2-stage-row scan"><span>Delta metadata stages</span><span>up to 5.402s</span><span>1–50</span><span>small</span></div>
+      <div class="case2-stage-row suspect"><span><b>Stage 4</b> · CSV write</span><span><b>538.062s</b></span><span><b>1</b></span><span><b>0 B</b></span></div>
+    </div>
+    <div class="case2-verdict violet">
+      <span>THE MAIN SQL EXECUTION</span>
+      <b>99.8%</b>
+      <small>spent in Stage 4</small>
+      <p>The final CSV stage contains one task and accounts for 538.062 of 539.045 seconds.</p>
+    </div>
+  </div>
+</div>
+
+<div v-else-if="$clicks === 1" class="mt-3">
+  <div class="text-sm font-bold tracking-widest text-rose-700">4 · INSPECT THE TASK SHAPE</div>
+  <div class="grid grid-cols-[1.6fr_0.75fr] gap-6 mt-2">
+    <div class="case2-task-chart">
+      <div class="case2-task-head"><span>Stage 4 evidence</span><span>Count</span><span>Time</span><span>Data</span></div>
+      <div class="case2-task-row"><b>Task 52 · partition 0</b><span><b>1 task</b></span><span><b>537.949s</b></span><span><b>79.48M rows</b></span></div>
+      <div class="case2-task-row"><b>Input</b><span>29 files</span><span>—</span><span>1.45 GiB read</span></div>
+      <div class="case2-task-row"><b>Output</b><span>1 gzip file</span><span>—</span><span>1.18 GiB written</span></div>
+      <div class="case2-task-row healthy"><b>Pressure checks</b><span>0 B spill</span><span>0.944s GC</span><span>0 B shuffle</span></div>
+    </div>
+    <div class="case2-verdict rose">
+      <span>AVAILABLE TASK SLOTS</span>
+      <b>1 of 8</b>
+      <small>occupied during the write</small>
+      <p>The only task uses 508.366 seconds of CPU. Seven executor slots have no task to run.</p>
+    </div>
+  </div>
+</div>
+
+<div v-else-if="$clicks === 2" class="mt-3">
+  <div class="text-sm font-bold tracking-widest text-amber-700">5 · CORRELATE THE CLUES</div>
+  <div class="case0-plan mt-3">
+    <div><b>Scan parquet</b><small>24 partitions · 29 files</small></div><i>→</i>
+    <div><b>Project</b><small>format timestamps and select 10 columns</small></div><i>→</i>
+    <div class="exchange"><b>Coalesce 1</b><small>one output partition</small></div><i>→</i>
+    <div><b>WriteFiles</b><small>CSV · gzip</small></div>
+  </div>
+  <div class="grid grid-cols-3 gap-4 mt-5">
+    <div class="case2-clue"><span>SQL PLAN</span><b><code>Coalesce 1</code>, no Exchange</b><small>The funnel sits directly before <code>WriteFiles</code>.</small></div>
+    <div class="case2-clue"><span>EXECUTOR EVENT</span><b>1 executor · 8 cores</b><small>Stage 4 schedules one task, requesting one CPU, on executor 1.</small></div>
+    <div class="case2-clue"><span>WRITE METRICS</span><b>1 file · 79,479,946 rows</b><small>The task writes 1,271,759,612 compressed bytes.</small></div>
+  </div>
+  <div class="mt-5 text-center text-xl font-semibold">The source exposes 24 partitions; <code>coalesce(1)</code> funnels every row into one writer task.</div>
+</div>
+
+<div v-else class="mt-3">
+  <div class="text-sm font-bold tracking-widest text-emerald-700">6 · TEST ONE HYPOTHESIS</div>
+  <div class="case2-hypothesis mt-3">
+    <div class="evidence"><span>EVIDENCE</span><b>79.48M rows through 1 task</b><small>537.949 seconds while seven task slots remain unused</small></div>
+    <i>→</i>
+    <div class="hypothesis"><span>HYPOTHESIS</span><b>The one-file contract serializes the write</b><small>One task formats every row and produces one gzip stream.</small></div>
+    <i>→</i>
+    <div class="test"><span>ONE CHANGE</span><b><code>coalesce(1)</code> → at least 64 partitions</b><small>Keep the rows and gzip CSV format; write a folder of part files.</small></div>
+  </div>
+  <div class="case2-compare mt-6">
+    <span>RERUN AND COMPARE</span>
+    <b>Write-stage time</b><b>Task count</b><b>Active task slots</b><b>79,479,946 rows</b>
+  </div>
+</div>
+
+<style>
+.case2-stage-list,
+.case2-task-chart {
+  overflow: hidden;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.9rem;
+  background: white;
+}
+.case2-stage-row {
+  display: grid;
+  grid-template-columns: 1.8fr 0.65fr 0.5fr 0.9fr;
+  align-items: center;
+  border-top: 1px solid #e2e8f0;
+  padding: 0.72rem 0.85rem;
+  color: #334155;
+  font-size: 0.75rem;
+}
+.case2-stage-row.header {
+  border: 0;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 0.63rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.case2-stage-row.scan { background: #eff6ff; }
+.case2-stage-row.suspect { border-left: 0.35rem solid #7c3aed; background: #faf5ff; color: #4c1d95; }
+.case2-verdict {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  border: 1px solid;
+  border-radius: 0.9rem;
+  padding: 1.2rem;
+  text-align: center;
+}
+.case2-verdict.violet { border-color: #c4b5fd; background: #f5f3ff; color: #5b21b6; }
+.case2-verdict.rose { border-color: #fda4af; background: #fff1f2; color: #be123c; }
+.case2-verdict > span,
+.case2-clue > span,
+.case2-hypothesis span,
+.case2-compare > span {
+  font-size: 0.65rem;
+  font-weight: 900;
+  letter-spacing: 0.11em;
+}
+.case2-verdict > b { margin-top: 0.6rem; font-size: 2rem; }
+.case2-verdict small { font-size: 0.75rem; }
+.case2-verdict p { margin: 1rem 0 0; color: #475569; font-size: 0.82rem; line-height: 1.3; }
+.case2-task-head,
+.case2-task-row {
+  display: grid;
+  grid-template-columns: 1.2fr repeat(3, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.8rem;
+  color: #334155;
+  font-size: 0.75rem;
+  text-align: right;
+}
+.case2-task-head { background: #f1f5f9; color: #64748b; font-size: 0.6rem; font-weight: 900; text-transform: uppercase; }
+.case2-task-head span:first-child,
+.case2-task-row b:first-child { text-align: left; }
+.case2-task-row { border-top: 1px solid #f1f5f9; }
+.case2-task-row.healthy { background: #f0fdf4; color: #166534; }
+.case0-plan {
+  display: grid;
+  grid-template-columns: 1fr auto 1.2fr auto 1.3fr auto 1.2fr;
+  align-items: center;
+  gap: 0.7rem;
+}
+.case0-plan > div {
+  border: 1px solid #cbd5e1;
+  border-radius: 0.75rem;
+  background: white;
+  padding: 0.75rem;
+  text-align: center;
+}
+.case0-plan > div.exchange { border: 2px solid #f59e0b; background: #fffbeb; color: #92400e; }
+.case0-plan small { display: block; margin-top: 0.25rem; color: #64748b; font-size: 0.67rem; }
+.case0-plan > i { color: #94a3b8; font-size: 1.6rem; font-style: normal; font-weight: 900; }
+.case2-clue { border: 1px solid #cbd5e1; border-radius: 0.8rem; background: #f8fafc; padding: 0.9rem; }
+.case2-clue > span { color: #64748b; }
+.case2-clue b { display: block; margin-top: 0.35rem; color: #0f172a; font-size: 1rem; }
+.case2-clue small { display: block; margin-top: 0.3rem; color: #64748b; font-size: 0.72rem; }
+.case2-hypothesis { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; align-items: stretch; gap: 0.7rem; }
+.case2-hypothesis > div { display: flex; min-height: 12rem; flex-direction: column; justify-content: center; border: 2px solid #cbd5e1; border-radius: 1rem; padding: 1rem; text-align: center; }
+.case2-hypothesis > i { align-self: center; color: #94a3b8; font-size: 2rem; font-style: normal; }
+.case2-hypothesis .evidence { background: #f8fafc; }
+.case2-hypothesis .hypothesis { border-color: #f59e0b; background: #fffbeb; }
+.case2-hypothesis .test { border-color: #22c55e; background: #f0fdf4; }
+.case2-hypothesis b { margin-top: 0.6rem; font-size: 1.1rem; }
+.case2-hypothesis small { margin-top: 0.5rem; color: #64748b; font-size: 0.75rem; }
+.case2-compare { display: grid; grid-template-columns: 1.2fr repeat(4, 1fr); gap: 0.5rem; align-items: center; border-radius: 0.75rem; background: #0f172a; padding: 0.8rem 1rem; color: white; text-align: center; }
+.case2-compare > span { color: #94a3b8; text-align: left; }
+.case2-compare b { font-size: 0.75rem; }
+</style>
+
+<!--
+Case 3 uses the completed bad run in case_3_logs: application_1786348221889_0001. The values on this slide come from SQL execution 1, Stage 4, Task 52, the executor-added event, and the SQL output accumulators. Stage and task IDs can change, so identify the work by the CASE 3 BAD description, the CSV call site, and the one-task shape.
+
+3 · LOCALIZE
+Open Spark History Server → SQL and select execution 1 named “CASE 3 BAD: gzip CSV export.” It lasts 539.045 seconds. The complete application lasts 572.605 seconds; the remaining time includes startup and short Delta metadata work.
+Open Stages and sort by Duration. Stage 4, named for the CSV call site, lasts 538.062 seconds and contains one task. It accounts for 99.8% of the main SQL execution. The longest metadata stage lasts 5.402 seconds. Open Stage 4 because the single output stage explains the runtime without adding durations from stages that ran for metadata.
+
+[click]
+4 · INSPECT
+Open Stage 4. Its event timeline contains one bar: Task 52 for partition 0 runs for 537.949 seconds. The task reads 79,479,946 records and 1,556,145,733 bytes, then writes the same 79,479,946 records and 1,271,759,612 gzip-compressed bytes. The SQL output metrics confirm one written file.
+The task spends 537.760 seconds in executor run time and 508.366 seconds on executor CPU. JVM garbage collection takes 0.944 seconds. Memory spill, disk spill, shuffle read, and shuffle write are all zero. This is not a skewed distribution because there is no distribution: one task owns the whole write.
+The executor-added event records one executor with eight cores, and the resource profile assigns one CPU to each task. Stage 4 can therefore occupy only one of eight task slots. The event log proves poor Spark task parallelism; it does not contain a persisted Fabric Executor Usage advice event, so do not quote a Diagnosis percentage for this run.
+
+[click]
+5 · CORRELATE
+Open the physical plan for SQL execution 1. Read it from Scan parquet through ColumnarToRow, Filter, Project, Coalesce, WriteFiles, and Execute InsertIntoHadoopFsRelationCommand. The Project formats both timestamp columns and selects the ten CSV columns. Coalesce has the argument 1 and sits immediately before WriteFiles.
+There is no Exchange in this plan. The scan metrics report 24 source partitions and 29 files, but coalesce(1) combines that input into one output partition. Stage 4 consequently launches one task, and that task performs the scan, timestamp formatting, CSV serialization, gzip compression, and output write.
+Correlate the plan with the executor and output events. Executor 1 has eight cores, but the stage offers one task. Write metrics report one file, 79,479,946 rows, and 1,271,759,612 bytes. Job commit takes only 328 milliseconds, so commit overhead does not explain the nine-minute stage. The serial data path does.
+
+[click]
+6 · TEST
+State one hypothesis: coalesce(1) enforces a one-partition, one-file contract, so Spark cannot spread CSV formatting and gzip compression across the eight available task slots.
+Run case3_poor_parallelism/fixed.py as a separate application. It replaces coalesce(1) with repartition(OUTPUT_PARTITIONS), where OUTPUT_PARTITIONS is at least 64. The rows, columns, CSV format, and gzip compression stay the same. The contract changes from one file to a folder of gzip part files. A strict single gzip stream preserves the serial bottleneck.
+Repartitioning may add an Exchange and shuffle; that is the cost of creating parallel output partitions. Compare the write-stage duration, task count, executor timeline, output row count, and part-file count. The output should still contain 79,479,946 rows. At least 64 write tasks using more than one slot and a shorter write stage support the hypothesis.
+No fixed-run event log is included, so do not claim a measured speedup. If the fixed stage still has one task, inspect the final plan for a later coalesce or another single-partition requirement.
+-->
