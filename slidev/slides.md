@@ -1529,9 +1529,9 @@ If the predicted metrics stay flat, reject the hypothesis and return to the evid
 <DetectiveFieldGuide :active="0" />
 
 <div class="mt-8 grid grid-cols-3 gap-5 text-center">
-  <div class="case-card"><b>Case 1</b><span>Data grew and spilled</span></div>
-  <div class="case-card"><b>Case 2</b><span>One straggler hid the skew</span></div>
-  <div class="case-card"><b>Case 3</b><span>Too much moving, too few hands</span></div>
+  <div class="case-card"><b>Case 0</b><span>Data grew and spilled</span></div>
+  <div class="case-card"><b>Case 1</b><span>One hot key hid the skew</span></div>
+  <div class="case-card"><b>Cases 2–3</b><span>Too much moving, too few hands</span></div>
 </div>
 
 <div class="mt-10 text-center text-3xl font-bold">Reset to Find. Follow the clues.</div>
@@ -1539,11 +1539,11 @@ If the predicted metrics stay flat, reject the hypothesis and return to the evid
 <!--
 Before the cases, ask the room to recall the route. Point to each card and let them supply the verb: Find. Choose. Localize. Inspect. Correlate. Test.
 
-Each case starts from the left again. In Case 1, data volume grows and a stage spills. In Case 2, one hot key creates a long tail. In Case 3, shuffle and low parallelism leave resources idle.
+Each case starts from the left again. In Case 0, data volume grows and a stage spills. In Case 1, one hot key creates a long tail. In Case 2, a tiny dimension triggers an unnecessary shuffle. In Case 3, one writer leaves resources idle.
 
 Keep this ribbon visible during each walkthrough. Move the highlight as we change views. The audience should know why we click a stage, task, SQL node, or executor before the screen changes.
 
-Set up Case 1: return to the 12-minute run that became a 55-minute run. We already know the route. Now we will work the evidence.
+Set up Case 0: return to the 12-minute run that became a 55-minute run. We already know the route. Now we will work the evidence.
 -->
 
 <style>
@@ -1561,6 +1561,33 @@ Set up Case 1: return to the 12-minute run that became a 55-minute run. We alrea
 .case-card span { margin-top: 0.5rem; font-size: 1.05rem; font-weight: 700; }
 </style>
 
+
+---
+
+# Case 0: six years of taxi trips
+
+<div class="text-sm font-bold tracking-widest text-blue-700">READ THE WORKLOAD BEFORE READING THE UI</div>
+
+<div class="grid grid-cols-2 gap-6 mt-6">
+  <div class="rounded-2xl border border-blue-200 bg-blue-50 p-6">
+    <div class="text-sm font-bold tracking-widest text-blue-700">WHAT THE SCRIPT DOES</div>
+    <ol class="mt-4 space-y-3 text-lg text-slate-700">
+      <li><b>1.</b> Compare a recent three-month report with the full history.</li>
+      <li><b>2.</b> Remove duplicate rides from the records.</li>
+      <li><b>3.</b> Count trips and calculate revenue for each month and route.</li>
+      <li><b>4.</b> Save the resulting route report.</li>
+    </ol>
+  </div>
+  <div class="rounded-2xl border-2 border-amber-300 bg-amber-50 p-6">
+    <div class="text-sm font-bold tracking-widest text-amber-700">WHY IT MIGHT FAIL</div>
+    <div class="mt-3 text-2xl font-bold text-slate-900">The report grows, but the work is still split into only eight pieces.</div>
+    <p class="mt-4 text-lg text-slate-700">Each piece must remember more rides while it builds the report. The larger workload can push those tasks into memory and disk spill.</p>
+  </div>
+</div>
+
+<!--
+Case 0 uses the official NYC TLC Yellow Taxi dataset: 72 monthly Parquet files from 2019–2024, normalized into about 250 million trips in `nyc_yellow_trips`. The setup also creates the separate 265-row `nyc_taxi_zones` lookup used by Case 2. The baseline reads October–December 2024; the bad and fixed runs read the full history. Exact counts vary when TLC republishes files.
+-->
 
 ---
 clicks: 3
@@ -1819,6 +1846,29 @@ Run the fixed application with the same full-history input and business logic, c
 </style>
 
 ---
+
+# Case 1: enrich trips with fare rules
+
+<div class="text-sm font-bold tracking-widest text-blue-700">READ THE WORKLOAD BEFORE READING THE UI</div>
+
+<div class="grid grid-cols-2 gap-6 mt-6">
+  <div class="rounded-2xl border border-blue-200 bg-blue-50 p-6">
+    <div class="text-sm font-bold tracking-widest text-blue-700">WHAT THE SCRIPT DOES</div>
+    <ol class="mt-4 space-y-3 text-lg text-slate-700">
+      <li><b>1.</b> Read 2022–2024 trips.</li>
+      <li><b>2.</b> Turn <code>RatecodeID</code> into a <code>fare_rule</code>.</li>
+      <li><b>3.</b> Left-join eight rule descriptions.</li>
+      <li><b>4.</b> Write the enriched trips to Parquet.</li>
+    </ol>
+  </div>
+  <div class="rounded-2xl border-2 border-amber-300 bg-amber-50 p-6">
+    <div class="text-sm font-bold tracking-widest text-amber-700">WHY IT MIGHT FAIL</div>
+    <div class="mt-3 text-2xl font-bold text-slate-900">A tiny dimension does not guarantee a healthy shuffled join.</div>
+    <p class="mt-4 text-lg text-slate-700">The demo disables broadcast and forces a sort-merge join. Most trips share <code>STANDARD</code>, so hashing the join key can send almost all rows to one reducer.</p>
+  </div>
+</div>
+
+---
 clicks: 3
 zoom: 0.85
 ---
@@ -2028,6 +2078,29 @@ No fixed-run event log is included here, so do not claim a measured speedup yet.
 -->
 
 ---
+
+# Case 2: add boroughs to every route
+
+<div class="text-sm font-bold tracking-widest text-blue-700">READ THE WORKLOAD BEFORE READING THE UI</div>
+
+<div class="grid grid-cols-2 gap-6 mt-6">
+  <div class="rounded-2xl border border-blue-200 bg-blue-50 p-6">
+    <div class="text-sm font-bold tracking-widest text-blue-700">WHAT THE SCRIPT DOES</div>
+    <ol class="mt-4 space-y-3 text-lg text-slate-700">
+      <li><b>1.</b> Read the 2019–2024 trip history.</li>
+      <li><b>2.</b> Build pickup/drop-off route pairs from the 265-zone lookup.</li>
+      <li><b>3.</b> Add borough names to every trip.</li>
+      <li><b>4.</b> Aggregate fares, tips, and trips by borough pair.</li>
+    </ol>
+  </div>
+  <div class="rounded-2xl border-2 border-amber-300 bg-amber-50 p-6">
+    <div class="text-sm font-bold tracking-widest text-amber-700">WHY IT MIGHT FAIL</div>
+    <div class="mt-3 text-2xl font-bold text-slate-900">A small lookup can make a large table move.</div>
+    <p class="mt-4 text-lg text-slate-700">The route dimension has 70,225 rows, but the demo disables broadcast and forces a sort-merge join. Spark may repartition and sort all 259 million trips to meet the join.</p>
+  </div>
+</div>
+
+---
 clicks: 3
 zoom: 0.85
 ---
@@ -2233,6 +2306,29 @@ State one hypothesis: Spark was forced to use a sort-merge join for a 70,225-row
 Run case2_excessive_shuffle/fixed.py as a separate application. It changes only the join hint by calling broadcast(routes). The expected physical plan contains BroadcastHashJoin and no Exchange on the trip branch before the join. The small final Exchange for groupBy(pickup_borough, dropoff_borough) should remain because broadcasting does not remove the aggregation shuffle.
 No fixed-run event log is included, so do not claim a measured speedup. Compare the join strategy, fact-side shuffle bytes, join-stage duration, joined row count, and the 64 final output rows. Removing the 5.31 GiB fact exchange while preserving the row counts supports the hypothesis. If the final plan still contains a fact-side Exchange before the join, the broadcast test did not take effect.
 -->
+
+---
+
+# Case 3: export one gzip CSV
+
+<div class="text-sm font-bold tracking-widest text-blue-700">READ THE WORKLOAD BEFORE READING THE UI</div>
+
+<div class="grid grid-cols-2 gap-6 mt-6">
+  <div class="rounded-2xl border border-blue-200 bg-blue-50 p-6">
+    <div class="text-sm font-bold tracking-widest text-blue-700">WHAT THE SCRIPT DOES</div>
+    <ol class="mt-4 space-y-3 text-lg text-slate-700">
+      <li><b>1.</b> Read 2023–2024 trips.</li>
+      <li><b>2.</b> Format timestamps and select ten columns.</li>
+      <li><b>3.</b> Combine the rows with <code>coalesce(1)</code>.</li>
+      <li><b>4.</b> Write a headered, gzip-compressed CSV.</li>
+    </ol>
+  </div>
+  <div class="rounded-2xl border-2 border-amber-300 bg-amber-50 p-6">
+    <div class="text-sm font-bold tracking-widest text-amber-700">WHY IT MIGHT FAIL</div>
+    <div class="mt-3 text-2xl font-bold text-slate-900">The output contract can erase Spark's parallelism.</div>
+    <p class="mt-4 text-lg text-slate-700"><code>coalesce(1)</code> funnels every row into one task. That task must format, serialize, compress, and write the entire gzip stream while the other executor slots wait.</p>
+  </div>
+</div>
 
 ---
 clicks: 3
