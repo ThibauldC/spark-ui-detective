@@ -3,45 +3,30 @@ theme: light-icons
 title: The Spark Detective
 info: |
   The Spark Detective: Diagnosing Spark Performance in Microsoft Fabric.
-class: text-left
+class: emfcc-cover
 drawings:
   persist: false
 transition: slide-left
 mdc: true
 ---
 
-# The Spark detective
+<div class="emfcc-visually-hidden">European Microsoft Fabric and SQL Community Conference · Barcelona · 28 September–1 October 2026</div>
 
-## The curious case of the slow Spark job: a detective's toolbox
+<!--
+Official conference opening slide. The session title follows as slide 2, as required by the EMFCC26 speaker template.
+-->
 
-<div class="title-visual mt-10">
-  <img src="./images/spark_ui_fabric.png" alt="Microsoft Fabric Spark UI" class="title-visual-ui" />
-  <img src="./images/crime-scene-tape.png" alt="Crime scene tape" class="title-visual-tape" />
+---
+class: emfcc-title
+---
+
+<div class="emfcc-recording-notice">Do not record or livestream this session</div>
+
+<div class="emfcc-title-copy">
+  <h1>The Spark Detective</h1>
+  <h2>The curious case of the slow Spark job: a detective's toolbox</h2>
+  <div class="emfcc-speaker">Thibauld Croonenborghs</div>
 </div>
-
-<style>
-.title-visual {
-  position: relative;
-  width: 94%;
-  margin-inline: auto;
-}
-.title-visual-ui {
-  display: block;
-  width: 100%;
-  border: 1px solid #cbd5e1;
-  border-radius: 1rem;
-  box-shadow: 0 0.75rem 1.5rem rgb(15 23 42 / 0.15);
-}
-.title-visual-tape {
-  position: absolute;
-  top: 20%;
-  left: 30%;
-  z-index: 1;
-  width: 42%;
-  transform: rotate(-8deg);
-  filter: drop-shadow(0 0.35rem 0.25rem rgb(15 23 42 / 0.25));
-}
-</style>
 
 <!--
 This is a practical investigation, not a Spark UI tour.
@@ -2530,4 +2515,14 @@ State one hypothesis: coalesce(1) enforces a one-partition, one-file contract, s
 Run case3_poor_parallelism/fixed.py as a separate application. It replaces coalesce(1) with repartition(OUTPUT_PARTITIONS), where OUTPUT_PARTITIONS is at least 64. The rows, columns, CSV format, and gzip compression stay the same. The contract changes from one file to a folder of gzip part files. A strict single gzip stream preserves the serial bottleneck.
 Repartitioning may add an Exchange and shuffle; that is the cost of creating parallel output partitions. Compare the write-stage duration, task count, executor timeline, output row count, and part-file count. The output should still contain 79,479,946 rows. At least 64 write tasks using more than one slot and a shorter write stage support the hypothesis.
 No fixed-run event log is included, so do not claim a measured speedup. If the fixed stage still has one task, inspect the final plan for a later coalesce or another single-partition requirement.
+-->
+
+---
+class: emfcc-end
+---
+
+<div class="emfcc-visually-hidden">Please rate this session in the conference app.</div>
+
+<!--
+Leave this official conference rating slide on screen for questions.
 -->
