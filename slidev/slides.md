@@ -71,51 +71,10 @@ The audience should feel the common pain: same notebook, same code, very differe
 -->
 
 ---
-hide:true
----
-
-# We Are Not Memorizing Tabs
-
-<div class="grid grid-cols-2 gap-8 mt-10">
-<div class="rounded-2xl bg-red-50 p-6 border border-red-100">
-
-## Avoid
-
-- Opening random Spark UI tabs
-- Changing tuning knobs first
-- Treating every slow job as CPU-bound
-- Stopping at job-level progress
-
-</div>
-<div class="rounded-2xl bg-emerald-50 p-6 border border-emerald-100">
-
-## Do Instead
-
-- Start from the right run
-- Move from symptom to evidence
-- Localize the expensive stage
-- Build a testable hypothesis
-
-</div>
-</div>
-
-<div class="mt-10 text-2xl font-semibold text-center">
-We are here to learn <span class="text-emerald-700">where to look first</span>.
-</div>
-
-<!--
-Make the main promise of the talk explicit: a repeatable debugging workflow.
-This slide prevents the talk from becoming a feature tour of Spark UI.
-The key contrast is random tuning versus evidence-driven diagnosis.
--->
-
----
 zoom: 0.85
 ---
 
 # Spark architecture: driver to workers
-
-<div class="mental-eyebrow text-blue-700">A hierarchy of coordination, execution, and data movement</div>
 
 <div class="architecture-topology">
   <div class="notebook-card">
@@ -181,11 +140,6 @@ zoom: 0.85
     </div>
   </div>
 
-  <div class="shuffle-lane">
-    <span class="shuffle-word">SHUFFLE (wide transformation)</span>
-    <span class="shuffle-arrows">↔ &nbsp; ↔ &nbsp; ↔</span>
-    <span class="shuffle-caption">data crosses worker boundaries before the next phase</span>
-  </div>
 </div>
 
 <style>
@@ -401,11 +355,6 @@ The Spark cluster is created as follows: 1 driver, 1 or more workers or nodes
 Start on the left: the notebook submits an action to the driver. The driver is the coordinator. It plans the work, schedules it, and tracks progress; it is not where all the rows are processed. Notebook asks SparkSession this is a driver process. SparkSession manages Spark application (1-to-1 relation)
 
 The driver fans work out to multiple worker nodes. Each worker hosts an executor with several parallel slots, so partitions can be processed at the same time. More workers mean more possible parallelism.
-
-The shuffle is the important exception to the simple fan-out picture: records cross worker boundaries so that equal keys meet before the next phase. That data movement is why a shuffle becomes a stage boundary in the Spark UI. Shuffles are triggered by something called wide transformations. Wide vs narrow transformation (will not go further into this)
-
-Narrow: transformations for which each input partition will contribute to only one output partition (filter)
-Wide: input partitions will contribute to many output partitions
 -->
 ---
 
@@ -441,20 +390,162 @@ An application can contain multiple jobs. An action triggers a job, a shuffle se
 
 ---
 
-# Spark UI in practice
+# One action becomes a job
 
-<div class="mental-eyebrow text-blue-700">The same hierarchy, in a real Fabric run</div>
+<div class="mental-eyebrow text-blue-700">A concrete example of the hierarchy</div>
+
+<div class="action-to-job">
+  <div class="action-code-card">
+    <div class="flow-label">NOTEBOOK</div>
+    <div class="action-code"><span>trips = spark.read.table("trips")</span><span>&nbsp;</span><span>(trips.filter("fare is positive")</span><span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.groupBy("zone")</span><span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.count()</span><span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.write.saveAsTable("daily"))</span></div>
+    <div class="action-callout"><b><code>write()</code></b> is the action: Spark must now do the work.</div>
+  </div>
+
+  <div class="flow-arrow"><span>→</span><small>triggers</small></div>
+
+  <div class="example-job">
+    <div class="example-job-head"><span>JOB 7</span><b>write()</b></div>
+    <div class="example-stage">
+      <div class="example-stage-copy"><b>STAGE 0</b><small>read · filter · partial aggregate</small></div>
+      <div class="example-tasks blue"><i>Task 0</i><i>Task 1</i><i>Task 2</i><i>Task 3</i></div>
+    </div>
+    <div class="example-shuffle"><b>↕ &nbsp; SHUFFLE &nbsp; ↕</b><span><code>groupBy("zone")</code> redistributes rows by zone</span></div>
+    <div class="example-stage">
+      <div class="example-stage-copy"><b>STAGE 1</b><small>final aggregate · write</small></div>
+      <div class="example-tasks violet"><i>Task 0</i><i>Task 1</i><i>Task 2</i></div>
+    </div>
+  </div>
+</div>
+
+<div class="action-summary">
+  <span><b>An action</b> creates a job</span><i>→</i><span><b>A shuffle</b> starts a new stage</span><i>→</i><span><b>Each partition</b> becomes a task</span>
+</div>
+
+<style>
+.action-to-job {
+  display: grid;
+  grid-template-columns: 18rem 3.5rem 1fr;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.action-code-card,
+.example-job {
+  border: 1px solid #cbd5e1;
+  border-radius: 1rem;
+  background: #f8fafc;
+}
+.action-code-card { padding: 1rem 1.1rem; }
+.flow-label {
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+.action-code {
+  display: flex;
+  flex-direction: column;
+  margin: 0.65rem 0;
+  color: #1e3a8a;
+  font-family: monospace;
+  font-size: 0.68rem;
+  line-height: 1.55;
+  white-space: pre;
+}
+.action-callout {
+  border-top: 1px solid #bfdbfe;
+  padding-top: 0.65rem;
+  color: #475569;
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+.action-callout b { color: #2563eb; }
+.flow-arrow { color: #2563eb; text-align: center; }
+.flow-arrow span { display: block; font-size: 2.2rem; font-weight: 800; }
+.flow-arrow small { color: #64748b; font-size: 0.65rem; }
+.example-job { overflow: hidden; border-color: #93c5fd; background: white; }
+.example-job-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #eff6ff;
+  padding: 0.55rem 0.8rem;
+  color: #1e3a8a;
+  font-size: 0.75rem;
+}
+.example-job-head span { font-weight: 900; letter-spacing: 0.1em; }
+.example-stage {
+  display: grid;
+  grid-template-columns: 11rem 1fr;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.75rem 0.8rem;
+}
+.example-stage-copy b { display: block; color: #334155; font-size: 0.75rem; letter-spacing: 0.08em; }
+.example-stage-copy small { display: block; margin-top: 0.2rem; color: #64748b; font-size: 0.65rem; line-height: 1.2; }
+.example-tasks { display: flex; gap: 0.45rem; }
+.example-tasks i {
+  min-width: 3.25rem;
+  border-radius: 0.45rem;
+  padding: 0.6rem 0.35rem;
+  color: white;
+  font-size: 0.65rem;
+  font-style: normal;
+  font-weight: 800;
+  text-align: center;
+}
+.example-tasks.blue i { background: #2563eb; }
+.example-tasks.violet i { background: #7c3aed; }
+.example-shuffle {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border-top: 2px dashed #f59e0b;
+  border-bottom: 2px dashed #f59e0b;
+  background: #fffbeb;
+  padding: 0.45rem 0.8rem;
+  color: #92400e;
+  font-size: 0.68rem;
+}
+.example-shuffle span { color: #78716c; }
+.action-summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 1.2rem;
+  border-radius: 0.85rem;
+  background: #f1f5f9;
+  padding: 0.7rem;
+  color: #475569;
+  font-size: 0.8rem;
+}
+.action-summary b { color: #0f172a; }
+.action-summary > i { color: #94a3b8; font-size: 1.15rem; font-style: normal; font-weight: 800; }
+</style>
+
+<!--
+2 types of building blocks in a Spark job: A transformation creates a new RDD/DataFrame from an existing one (it describes a step in your pipeline - like a select, filter, join etc) and is evaluated lazily. An action asks Spark to materialize a result (return to the driver, write to storage, or otherwise “finish” the computation), which is what triggers a job in Spark’s execution model.
+
+Stage 0 reads, filters, and performs a partial aggregate across four partitions, so it has four tasks. groupBy redistributes rows by zone: that shuffle ends Stage 0. Stage 1 performs the final aggregate and writes its three output partitions.
+
+Say the chain once: action creates a job; shuffle starts a new stage; each partition becomes a task. The previous slide provides the zoomed-out hierarchy; this is the concrete execution it represents.
+
+The shuffle is the important exception to the simple fan-out picture: records cross worker boundaries so that equal keys meet before the next phase. That data movement is why a shuffle becomes a stage boundary in the Spark UI. Shuffles are triggered by something called wide transformations. Wide vs narrow transformations
+
+Narrow: transformations for which each input partition will contribute to only one output partition (filter)
+Wide: input partitions will contribute to many output partitions
+-->
+
+---
+
+# Spark UI in practice
 
 <img
   src="./images/spark_ui_jobs.png"
   alt="Spark UI Jobs tab"
   class="spark-ui-jobs-screenshot"
 />
-
-<!--
-Add the Spark UI screenshot here before moving into the individual tabs.
-Keep this slide as the visual bridge from the mental model to the practical walkthrough.
--->
 
 <style>
 @import './styles/index.css';
@@ -477,19 +568,17 @@ zoom: 0.85
 
 # Job
 
-<div class="mental-eyebrow text-blue-700">Concept 1 of 5 · the unit that gets triggered</div>
-
 <div class="mental-grid">
   <div class="mental-copy">
     <div class="mental-kicker text-blue-700">A job is…</div>
-    <div class="mental-definition">One <b>user action</b> or <b>SQL execution</b>—the thing you asked Spark to do.</div>
+    <div class="mental-definition">One <b>user action</b> or <b>SQL execution</b></div>
     <div class="mental-detail">
       <b>Where it lives in the UI</b>
       <span>The <code>Jobs</code> tab: one row per action, with its trigger, duration, stages, and tasks.</span>
     </div>
     <div class="mental-detail">
       <b>Triggered by</b>
-      <span><code>count()</code> · <code>collect()</code> · <code>write…</code> · <code>show()</code> · a SQL query</span>
+      <span>actions, like <code>count()</code> · <code>collect()</code> · <code>write…</code> · <code>show()</code> · a SQL query</span>
     </div>
   </div>
   <div class="mental-panel job-table">
@@ -502,6 +591,10 @@ zoom: 0.85
   </div>
 </div>
 
+<style>
+@import './styles/index.css';
+</style>
+
 <!--
 A job is the unit Spark creates when an action asks it to produce a result. Transformations remain lazy; actions such as count, collect, show, or write trigger work.
 
@@ -510,29 +603,23 @@ In the Jobs tab, one row represents that request. A single application can conta
 Use the description to connect the row back to notebook code, then open the job to see the stages Spark needed.
 -->
 
-<style>
-@import './styles/index.css';
-</style>
-
 ---
 zoom: 0.85
 ---
 
 # Stage
 
-<div class="mental-eyebrow text-violet-700">Concept 2 of 5 · the boundary that matters</div>
-
 <div class="mental-grid">
   <div class="mental-copy">
     <div class="mental-kicker text-violet-700">A stage is…</div>
     <div class="mental-definition">A run of work Spark can do <b>without moving data</b>. A <b>shuffle</b> creates the next stage.</div>
     <div class="mental-detail">
-      <b>The rule</b>
-      <span><code>groupBy</code>, <code>join</code>, <code>repartition</code>, and windows often create a shuffle—and therefore a stage boundary.</span>
-    </div>
-    <div class="mental-detail">
       <b>Where it lives in the UI</b>
       <span>The <code>Stages</code> tab, or the DAG visualisation inside a job.</span>
+    </div>
+    <div class="mental-detail">
+      <b>Triggered by</b>
+      <span><code>groupBy</code>, <code>join</code>, <code>repartition</code>, and windows often create a shuffle</span>
     </div>
   </div>
   <div class="mental-panel">
@@ -559,6 +646,10 @@ zoom: 0.85
   </div>
 </div>
 
+<style>
+@import './styles/index.css';
+</style>
+
 <!--
 A stage groups operations that Spark can pipeline without redistributing data. The important boundary is the shuffle.
 
@@ -566,30 +657,23 @@ Here Spark scans, filters, and performs a partial aggregation in Stage 12. The s
 
 That is why joins, aggregations, repartitioning, and windows matter during an investigation: they often create the boundaries where data moves, waits, or spills.
 -->
-
-<style>
-@import './styles/index.css';
-</style>
-
 ---
 zoom: 0.85
 ---
 
 # Task
 
-<div class="mental-eyebrow text-rose-700">Concept 3 of 5 · the atom of execution</div>
-
 <div class="mental-grid">
   <div class="mental-copy">
     <div class="mental-kicker text-rose-700">A task is…</div>
     <div class="mental-definition"><b>One partition’s</b> unit of work within a stage.</div>
     <div class="mental-detail">
-      <b>The relationship</b>
-      <span><code>tasks per stage</code> = <code>partitions in that stage</code>. The tasks run the same code on different data.</span>
-    </div>
-    <div class="mental-detail">
       <b>Where it lives in the UI</b>
       <span>Stage detail → task table and timeline. Skew, slow tasks, GC, and spill become visible here.</span>
+    </div>
+    <div class="mental-detail">
+      <b>The relationship</b>
+      <span><code>tasks per stage</code> = <code>partitions in that stage</code>. The tasks run the same code on different data.</span>
     </div>
   </div>
   <div class="mental-panel task-table">
@@ -604,6 +688,10 @@ zoom: 0.85
   </div>
 </div>
 
+<style>
+@import './styles/index.css';
+</style>
+
 <!--
 A task is the same stage logic applied to one partition. Two hundred partitions produce two hundred tasks for that stage.
 
@@ -612,29 +700,23 @@ That relationship makes the task table diagnostic. Most tasks here finish in und
 Job-level progress hides this shape. Stage detail reveals skew, stragglers, spill, GC, retries, and shuffle fetch wait at the level where they happen.
 -->
 
-<style>
-@import './styles/index.css';
-</style>
-
 ---
 zoom: 0.85
 ---
 
 # Executor
 
-<div class="mental-eyebrow text-emerald-700">Concept 4 of 5 · where the work runs</div>
-
 <div class="mental-grid">
   <div class="mental-copy">
     <div class="mental-kicker text-emerald-700">An executor is…</div>
-    <div class="mental-definition">A worker <b>JVM process</b> that runs tasks in parallel slots and holds cached data.</div>
-    <div class="mental-detail">
-      <b>The math</b>
-      <span><code>parallel tasks</code> ≈ <code>executors × cores</code>. With 12 cores available, only about 12 tasks run at once.</span>
-    </div>
+    <div class="mental-definition">A worker <b>JVM process</b> that runs tasks in parallel slots</div>
     <div class="mental-detail">
       <b>Where it lives in the UI</b>
       <span>The <code>Executors</code> tab: active tasks, memory, GC time, shuffle, and executor logs.</span>
+    </div>
+    <div class="mental-detail">
+      <b>The math</b>
+      <span><code>parallel tasks</code> ≈ <code>executors × cores</code>. With 12 cores available, only about 12 tasks run at once.</span>
     </div>
   </div>
   <div class="mental-panel executor-table">
@@ -649,6 +731,10 @@ zoom: 0.85
   </div>
 </div>
 
+<style>
+@import './styles/index.css';
+</style>
+
 <!--
 Executors are the worker processes that perform tasks. Their cores determine how many tasks can run concurrently; the rest wait for a slot.
 
@@ -657,29 +743,19 @@ The Executors tab shows where pressure lands. Compare active tasks, memory use, 
 An imbalance can support a skew hypothesis. Pressure across every executor points instead toward a cost shared by the stage, such as broad memory or shuffle pressure.
 -->
 
-<style>
-@import './styles/index.css';
-</style>
-
 ---
 zoom: 0.85
 ---
 
 # SQL tab
 
-<div class="mental-eyebrow text-amber-700">Concept 5 of 5 · why those stages exist</div>
-
 <div class="mental-grid">
   <div class="mental-copy">
     <div class="mental-kicker text-amber-700">The SQL tab is…</div>
     <div class="mental-definition">The <b>physical plan</b> Spark actually chose for a SQL or DataFrame query.</div>
     <div class="mental-detail">
-      <b>Read it like this</b>
-      <span>Every <code>Exchange</code> is a shuffle—and therefore a stage boundary. Metrics hang from each operator.</span>
-    </div>
-    <div class="mental-detail">
-      <b>Why it matters</b>
-      <span>Jobs and stages show <i>what</i> ran. The SQL plan explains <b>why</b>.</span>
+      <b>Why useful</b>
+      <span>Jobs and stages show <i>what</i> ran. The SQL plan explains <b>why</b>.  Connect an expensive stage to a join, aggregation, scan, or write.</span>
     </div>
   </div>
   <div class="mental-panel plan-panel">
@@ -709,6 +785,10 @@ zoom: 0.85
   </div>
 </div>
 
+<style>
+@import './styles/index.css';
+</style>
+
 <!--
 The SQL tab connects the runtime evidence back to the physical work Spark chose.
 
@@ -716,10 +796,6 @@ Read this plan from the scans upward. Both sides pass through an Exchange, so Sp
 
 Use operator metrics to connect an expensive stage to a join, aggregation, scan, or write. The metrics tell you what hurts; the plan explains why that work exists.
 -->
-
-<style>
-@import './styles/index.css';
-</style>
 
 ---
 
@@ -773,15 +849,10 @@ It is still possible to construct the UI of an application through Spark’s his
 
 | Situation | Use |
 |---|---|
-| You do not know which run to inspect | **Monitor hub / Recent runs** |
+| Compare runs over time and see anomalies  | **Monitor hub / Recent runs / Monitor run series** |
 | You want a first view of run details | **Spark Application detail monitoring** |
-| Compare runs over time and see anomalies | **Monitor run series** |
 | The Spark application is still running | **Live Spark UI** |
 | The Spark application completed or failed | **Spark History Server** |
-</div>
-
-<div class="mt-8 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-slate-500">
-Placeholder: screenshot of Fabric Monitor hub, Recent runs, or notebook run details
 </div>
 
 <!--
@@ -798,7 +869,7 @@ If the audience does not know which run is relevant, they should start in Monito
 <img
   src="./images/recent_runs.png"
   alt="Recent runs overview"
-  class="spark-ui-jobs-screenshot"
+  class="recent-runs-screenshot"
 />
 
 <!--
@@ -809,7 +880,7 @@ Keep this slide as the visual bridge from the mental model to the practical walk
 <style>
 @import './styles/index.css';
 
-.spark-ui-jobs-screenshot {
+.recent-runs-screenshot {
   display: block;
   width: 100%;
   max-height: 27rem;
@@ -1066,9 +1137,9 @@ clicks: 6
 <DetectiveFieldGuide :active="$clicks" />
 
 <div class="mt-8 text-center text-2xl font-semibold">
-  <span v-if="$clicks === 0">A crime has been committed. Follow the evidence.</span>
+  <span v-if="$clicks === 0">A crime has been committed. Follow the evidence to find the culprit.</span>
   <span v-else-if="$clicks < 6">Put each clue under a microscope.</span>
-  <span v-else>A case ends with one testable hypothesis.</span>
+  <span v-else>A case ends with a testable hypothesis.</span>
 </div>
 
 <!--
@@ -1121,8 +1192,6 @@ zoom: 0.85
     </div>
   </div>
 </div>
-
-<div class="mt-6 text-center text-xl font-semibold">Wrong run in, wrong diagnosis out.</div>
 
 <!--
 Start with the question from the opening: yesterday took 12 minutes and today took 55. Before we diagnose Spark, we need both application records. Confirm that they ran the same notebook or job definition and identify the relevant attempt. Compare input volume, start time, status, and capacity context.
@@ -1192,31 +1261,14 @@ zoom: 0.85
 
   <div class="rounded-2xl bg-violet-50 border border-violet-200 p-6">
     <div class="text-sm font-bold tracking-widest text-violet-700">3 · LOCALIZE</div>
-    <h2 class="mt-2">Ask first</h2>
-    <div class="mt-5 text-2xl font-semibold leading-snug">Is the whole application slow—or does one stage explain it?</div>
+    <div class="mt-5 text-2xl font-semibold leading-snug">Is the whole application slow or does one stage explain it?</div>
     <ul class="mt-5 text-lg leading-relaxed">
       <li>Sort by duration</li>
       <li>Notice retries or failures</li>
-      <li>Compare shuffle and task count</li>
+      <li>Look at shuffle, spill and task count</li>
     </ul>
   </div>
 </div>
-
-<div class="mt-7 rounded-xl bg-slate-900 px-6 py-4 text-center text-xl font-semibold text-white">
-  Open the stage that explains the runtime.
-</div>
-
-<!--
-Give the audience a few seconds to scan the table. Ask: which row would you open first?
-
-Stage 8 took 36 minutes and 42 seconds. The other visible stages took about one or two minutes. Stage 8 accounts for most of this application's runtime, so it becomes our investigation boundary.
-
-The row gives us early clues. It processed 86 GB of shuffle and spilled 41 GB. Those numbers deserve attention, but they do not prove a cause. A large shuffle can be expected. Spill can hurt without explaining the full delay. We need the task detail next.
-
-Also check failed and retried stages. A stage may appear several times because Spark retried it, which can hide the true cost if you inspect only the final successful attempt. An unusual task count can expose poor parallelism before you open the stage.
-
-The discipline here saves time: rank stages by their contribution to runtime, then open the one that can explain the symptom.
--->
 
 <style>
 .stage-table {
@@ -1246,6 +1298,19 @@ The discipline here saves time: rank stages by their contribution to runtime, th
   color: #4c1d95;
 }
 </style>
+
+
+<!--
+Give the audience a few seconds to scan the table. Ask: which row would you open first?
+
+Stage 8 took 36 minutes and 42 seconds. The other visible stages took about one or two minutes. Stage 8 accounts for most of this application's runtime, so it becomes our investigation boundary.
+
+The row gives us early clues. It processed 86 GB of shuffle and spilled 41 GB. Those numbers deserve attention (this is sus), but they do not prove a cause. A large shuffle can be expected. As with a real criminal case we need multiple pieces of evidence to prove someone is guilty. Spill can hurt without explaining the full delay. We need the task detail next.
+
+Also check failed and retried stages. A stage may appear several times because Spark retried it, which can hide the true cost if you inspect only the final successful attempt. An unusual task count can expose poor parallelism before you open the stage.
+
+The discipline here saves time: rank stages by their contribution to runtime, then open the one that can explain the symptom.
+-->
 
 ---
 
@@ -1279,26 +1344,6 @@ The discipline here saves time: rank stages by their contribution to runtime, th
     <small>Check spill, GC, fetch wait, and I/O.</small>
   </div>
 </div>
-
-<div class="mt-5 flex flex-wrap justify-center gap-3">
-  <span class="clue-chip">duration</span><span class="clue-chip">shuffle read</span><span class="clue-chip">spill</span><span class="clue-chip">GC time</span><span class="clue-chip">fetch wait</span><span class="clue-chip">retries</span>
-</div>
-
-<div class="mt-5 text-center text-2xl font-semibold">The average hides the case. The distribution reveals it.</div>
-
-<!--
-Task distributions reveal what a stage average conceals.
-
-Start on the left. These tasks finish in a narrow range. Balanced does not mean fast; it means no small group of tasks controls the stage duration. If every task is slow, investigate a cost shared across the stage, such as heavy shuffle, spill, CPU work, or external I/O.
-
-The middle shape has a long tail. Most tasks finish, while one task keeps the stage alive. Compare shuffle read and input size per task. One task reading far more data points toward skew. Similar input with one slow task points toward a straggler, executor issue, or external delay.
-
-On the right, many tasks consume substantial time. Check spill, GC time, shuffle fetch wait, scheduler delay, and retries. These metrics separate memory pressure, data movement, scheduling, and unstable execution.
-
-Use medians, percentiles, and the task table where available. An average blends the fast majority with the expensive tail.
-
-We will recall these three shapes in the cases: balanced with spill, a skewed long tail, and broad pressure from shuffle or weak parallelism.
--->
 
 <style>
 .task-pattern {
@@ -1347,6 +1392,20 @@ We will recall these three shapes in the cases: balanced with spill, a skewed lo
 }
 </style>
 
+<!--
+Task distributions reveal what a stage average conceals.
+
+Start on the left. These tasks finish in a narrow range. Balanced does not mean fast; it means no small group of tasks controls the stage duration. If every task is slow, investigate a cost shared across the stage, such as heavy shuffle, spill, CPU work, or external I/O.
+
+The middle shape has a long tail. Most tasks finish, while one task keeps the stage alive. Compare shuffle read and input size per task. One task reading far more data points toward skew. Similar input with one slow task points toward a straggler, executor issue, or external delay.
+
+On the right, many tasks consume substantial time. Check spill, GC time, shuffle fetch wait, scheduler delay, and retries. These metrics separate memory pressure, data movement, scheduling, and unstable execution.
+
+Use medians, percentiles, and the task table where available. An average blends the fast majority with the expensive tail.
+
+We will recall these three shapes in the cases: balanced with spill, a skewed long tail, and broad pressure from shuffle or weak parallelism.
+-->
+
 ---
 zoom: 0.85
 ---
@@ -1379,24 +1438,10 @@ zoom: 0.85
 </div>
 
 <div class="mt-6 grid grid-cols-[1fr_auto_1fr] items-center gap-5 text-center">
-  <div class="rounded-xl bg-amber-50 border border-amber-200 p-4 text-xl"><b>One clue</b><br><span class="text-slate-600">a suspicion</span></div>
+  <div class="rounded-xl bg-amber-50 border border-amber-200 p-4 text-xl"><b>One clue</b><br><span class="text-slate-600">a suspicion and won't hold up in court</span></div>
   <div class="text-4xl text-slate-400">→</div>
-  <div class="rounded-xl bg-emerald-50 border border-emerald-200 p-4 text-xl"><b>Independent clues agree</b><br><span class="text-slate-600">a hypothesis worth testing</span></div>
+  <div class="rounded-xl bg-emerald-50 border border-emerald-200 p-4 text-xl"><b>Independent clues agree</b><br><span class="text-slate-600">a hypothesis worth testing and you might be able to convince a jury</span></div>
 </div>
-
-<!--
-We have localized the stage and read its task shape. Now we need independent evidence.
-
-Keep the stage at the center. In the SQL view, find the operator connected to that stage. Exchanges show shuffle boundaries. The join strategy or aggregation explains why Spark created the expensive work.
-
-Move to Executors when the task metrics suggest memory pressure, GC, or uneven usage. Check whether the pressure appears across executors or concentrates on one worker. A single unhealthy executor tells a different story from every executor spilling.
-
-Fabric adds useful post-mortem evidence. The Diagnosis tab can flag data skew, time skew, and executor usage. The Graph view helps connect jobs and stages. Application and executor logs can confirm fetch failures, repeated loss, or an external error.
-
-Keep one identifier in your head as you move between views: the same stage, task, executor, or SQL node. Opening more tabs does not strengthen a case. Two independent clues that describe the same bottleneck do.
-
-Transition: once the clues agree, phrase a claim that a rerun can disprove.
--->
 
 <style>
 .corroboration {
@@ -1426,6 +1471,20 @@ Transition: once the clues agree, phrase a claim that a rerun can disprove.
 .evidence-card p { margin: 0; color: #64748b; font-size: 0.85rem; }
 </style>
 
+<!--
+We have localized the stage and read its task shape. Now we need independent evidence.
+
+Keep the stage at the center. In the SQL view, find the operator connected to that stage. Exchanges show shuffle boundaries. The join strategy or aggregation explains why Spark created the expensive work.
+
+Move to Executors when the task metrics suggest memory pressure, GC, or uneven usage. Check whether the pressure appears across executors or concentrates on one worker. A single unhealthy executor tells a different story from every executor spilling.
+
+Fabric adds useful post-mortem evidence. The Diagnosis tab can flag data skew, time skew, and executor usage. The Graph view helps connect jobs and stages. Application and executor logs can confirm fetch failures, repeated loss, or an external error.
+
+Keep one identifier in your head as you move between views: the same stage, task, executor, or SQL node. Opening more tabs does not strengthen a case. Two independent clues that describe the same bottleneck do.
+
+Transition: once the clues agree, phrase a claim that a rerun can disprove.
+-->
+
 ---
 zoom: 0.85
 ---
@@ -1444,7 +1503,7 @@ zoom: 0.85
   <div class="hypothesis-box suspect">
     <div class="box-label">HYPOTHESIS</div>
     <b>The larger shuffle crossed a memory threshold</b>
-    <span>Not “Spark needs more tuning”</span>
+    <span>It has written to disk</span>
   </div>
   <div class="chain-arrow">→</div>
   <div class="hypothesis-box test">
@@ -1454,26 +1513,7 @@ zoom: 0.85
   </div>
 </div>
 
-<div class="mt-8 grid grid-cols-2 gap-6 text-center text-xl">
-  <div class="rounded-xl border border-red-200 bg-red-50 p-5 text-red-800 line-through">Change five knobs and hope</div>
-  <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-5 font-semibold text-emerald-800">Change one thing and learn</div>
-</div>
-
 <div class="mt-8 text-center text-3xl font-bold">Evidence → hypothesis → test → compare</div>
-
-<!--
-Use a three-part sentence to close the investigation.
-
-First, state the evidence with numbers: Stage 8 accounts for most of the runtime. Its tasks finish in a similar range. Shuffle volume and spill increased compared with the faster run.
-
-Second, name one cause: the larger shuffle crossed a memory threshold, so tasks wrote intermediate data to disk. This claim predicts what we should see after a targeted change.
-
-Third, define the test. Reduce the shuffle volume, pre-aggregate earlier, or adjust partitioning. Pick one change for the rerun. Then compare Stage 8 duration, spill, shuffle volume, and task distribution with the original run.
-
-Wall-clock time alone gives weak confirmation because capacity load and external systems can vary between runs. The stage metrics tell us whether our change affected the mechanism we suspected.
-
-If the predicted metrics stay flat, reject the hypothesis and return to the evidence. That result still teaches us more than changing several settings at once.
--->
 
 <style>
 .hypothesis-chain {
@@ -1507,9 +1547,11 @@ If the predicted metrics stay flat, reject the hypothesis and return to the evid
 .chain-arrow { align-self: center; color: #94a3b8; font-size: 2.5rem; font-weight: 800; }
 </style>
 
+
+
 ---
 
-# Same route. New evidence.
+# Let's make this more practical
 
 <DetectiveFieldGuide :active="0" />
 
@@ -1519,17 +1561,7 @@ If the predicted metrics stay flat, reject the hypothesis and return to the evid
   <div class="case-card"><b>Cases 2–3</b><span>Too much moving, too few hands</span></div>
 </div>
 
-<div class="mt-10 text-center text-3xl font-bold">Reset to Find. Follow the clues.</div>
-
-<!--
-Before the cases, ask the room to recall the route. Point to each card and let them supply the verb: Find. Choose. Localize. Inspect. Correlate. Test.
-
-Each case starts from the left again. In Case 0, data volume grows and a stage spills. In Case 1, one hot key creates a long tail. In Case 2, a tiny dimension triggers an unnecessary shuffle. In Case 3, one writer leaves resources idle.
-
-Keep this ribbon visible during each walkthrough. Move the highlight as we change views. The audience should know why we click a stage, task, SQL node, or executor before the screen changes.
-
-Set up Case 0: return to the 12-minute run that became a 55-minute run. We already know the route. Now we will work the evidence.
--->
+<div class="mt-10 text-center text-3xl font-bold">Follow the clues.</div>
 
 <style>
 .case-card {
@@ -1546,6 +1578,15 @@ Set up Case 0: return to the 12-minute run that became a 55-minute run. We alrea
 .case-card span { margin-top: 0.5rem; font-size: 1.05rem; font-weight: 700; }
 </style>
 
+<!--
+Before the cases, ask the room to recall the route. Point to each card and let them supply the verb: Find. Choose. Localize. Inspect. Correlate. Test.
+
+Each case starts from the left again. In Case 0, data volume grows and a stage spills. In Case 1, one hot key creates a long tail. In Case 2, a tiny dimension triggers an unnecessary shuffle. In Case 3, one writer leaves resources idle.
+
+Keep this ribbon visible during each walkthrough. Move the highlight as we change views. The audience should know why we click a stage, task, SQL node, or executor before the screen changes.
+
+Set up Case 0: return to the 12-minute run that became a 55-minute run. We already know the route. Now we will work the evidence.
+-->
 
 ---
 
@@ -1648,10 +1689,6 @@ zoom: 0.85
     <div class="hypothesis"><span>HYPOTHESIS</span><b>The shuffle is under-partitioned</b><small>Each aggregation task crosses its memory threshold.</small></div>
     <i>→</i>
     <div class="test"><span>ONE CHANGE</span><b>8 → at least 256 partitions</b><small>Eight cores process the smaller tasks in waves. Same input, smaller per-task state.</small></div>
-  </div>
-  <div class="case0-compare mt-6">
-    <span>RERUN AND COMPARE</span>
-    <b>Stage duration</b><b>Disk spill</b><b>Shuffle per task</b><b>Task distribution</b>
   </div>
 </div>
 
@@ -1912,7 +1949,6 @@ zoom: 0.85
     <div class="case1-clue"><span>DIAGNOSIS · TIME SKEW</span><b>134.47s max</b><small>versus 0.93s mean task duration</small></div>
     <div class="case1-clue"><span>STAGE 8</span><b>0 spill · 0 fetch wait</b><small>The straggler is processing the hot partition, not waiting on disk or network.</small></div>
   </div>
-  <div class="mt-5 text-center text-xl font-semibold">The plan groups one hot key; the task table and Fabric Diagnosis show where it lands.</div>
 </div>
 
 <div v-else class="mt-3">
@@ -1923,10 +1959,6 @@ zoom: 0.85
     <div class="hypothesis"><span>HYPOTHESIS</span><b><code>STANDARD</code> is the hot key</b><small>Hashing <code>fare_rule</code> alone sends it to one reducer.</small></div>
     <i>→</i>
     <div class="test"><span>ONE CHANGE</span><b>Add 8,192 deterministic salts</b><small>Replicate the 8-row rule table across salts; keep 256 shuffle partitions.</small></div>
-  </div>
-  <div class="case1-compare mt-6">
-    <span>RERUN AND COMPARE</span>
-    <b>Stage duration</b><b>Max ÷ mean data</b><b>Max task time</b><b>119,136,044 rows</b>
   </div>
 </div>
 
@@ -2157,10 +2189,6 @@ zoom: 0.85
     <div class="hypothesis"><span>HYPOTHESIS</span><b>The merge join is unnecessary</b><small>It forces the large-side Exchange and Sort.</small></div>
     <i>→</i>
     <div class="test"><span>ONE CHANGE</span><b><code>broadcast(routes)</code></b><small>Expect BroadcastHashJoin and no fact-side join exchange.</small></div>
-  </div>
-  <div class="case2-compare mt-6">
-    <span>RERUN AND COMPARE</span>
-    <b>Join strategy</b><b>Fact shuffle</b><b>Join-stage time</b><b>64 output rows</b>
   </div>
 </div>
 

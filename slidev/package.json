@@ -8,9 +8,9 @@
     "build": "slidev build",
     "export": "slidev export"
   },
-  "dependencies": {},
   "devDependencies": {
     "@slidev/cli": "52.18.0",
+    "playwright-chromium": "^1.63.0",
     "slidev-theme-light-icons": "latest"
   }
 }

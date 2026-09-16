@@ -1,10 +1,15 @@
 import { fileURLToPath } from 'node:url'
+import { resolve } from 'node:path'
 import { defineConfig } from 'vite'
 
-const slides = fileURLToPath(new URL('./slides.md', import.meta.url))
+const root = fileURLToPath(new URL('.', import.meta.url))
 
 export default defineConfig({
-  resolve: {
-    alias: [{ find: /^\/slides\.md(?=__slidev_)/, replacement: slides }],
-  },
+  plugins: [{
+    name: 'slidev-virtual-slide-assets',
+    resolveId(source, importer) {
+      if (source.startsWith('.') && importer?.includes('__slidev_')) return resolve(root, source)
+    },
+  }],
+  server: { fs: { strict: false } },
 })
