@@ -531,6 +531,8 @@ Stage 0 reads, filters, and performs a partial aggregate across four partitions,
 
 Say the chain once: action creates a job; shuffle starts a new stage; each partition becomes a task. The previous slide provides the zoomed-out hierarchy; this is the concrete execution it represents.
 
+Clarify the potentially confusing `count()` here: `groupBy("zone").count()` is a grouped DataFrame aggregation that returns a new DataFrame, so it is still lazy in this chain. A standalone `df.count()` is different: it is an action, materializes the result, and creates a job. In this example the final `write()` is the action that triggers the whole plan.
+
 The shuffle is the important exception to the simple fan-out picture: records cross worker boundaries so that equal keys meet before the next phase. That data movement is why a shuffle becomes a stage boundary in the Spark UI. Shuffles are triggered by something called wide transformations. Wide vs narrow transformations
 
 Narrow: transformations for which each input partition will contribute to only one output partition (filter)
@@ -561,6 +563,15 @@ Wide: input partitions will contribute to many output partitions
   box-shadow: 0 0.75rem 1.5rem rgb(15 23 42 / 0.15);
 }
 </style>
+
+<!--
+This is the standard Jobs-tab view. For a completed run in Fabric, the Spark History Server adds two useful investigation views:
+
+- **Graph**: select a Job ID, then open Graph to see the job DAG and its stage flow. Switch between progress, read, and written data; select a stage node to open its stage details. Use it to understand how the stages connect and where the work is concentrated.
+- **Diagnosis**: select a Job ID, then open Diagnosis. Fabric highlights Data Skew, Time Skew, and Executor Usage Analysis. These are shortcuts to patterns we could otherwise find manually in task tables and executor timelines.
+
+The Graph tab gives the map; Diagnosis points at suspicious patterns. Neither replaces the task table: use the graph to choose where to drill in, then verify the signal in stage and task metrics.
+-->
 
 ---
 zoom: 0.85
@@ -749,13 +760,21 @@ zoom: 0.85
 
 # SQL tab
 
-<div class="mental-grid">
+<div class="mental-grid sql-tab-grid">
   <div class="mental-copy">
     <div class="mental-kicker text-amber-700">The SQL tab is…</div>
     <div class="mental-definition">The <b>physical plan</b> Spark actually chose for a SQL or DataFrame query.</div>
     <div class="mental-detail">
       <b>Why useful</b>
-      <span>Jobs and stages show <i>what</i> ran. The SQL plan explains <b>why</b>.  Connect an expensive stage to a join, aggregation, scan, or write.</span>
+      <span>Jobs and stages show <i>what</i> ran. The SQL plan explains <b>why</b>. Connect an expensive stage to a join, aggregation, scan, or write.</span>
+    </div>
+    <div class="mental-detail">
+      <b>Where it lives in the UI</b>
+      <span>The <code>SQL</code> tab in Spark UI or Spark History Server. Select a SQL execution to inspect its physical plan and metrics.</span>
+    </div>
+    <div class="mental-detail">
+      <b>How it relates to Graph</b>
+      <span>The Fabric History Server's <code>Graph</code> tab shows the job-level DAG and stage flow; SQL shows the operators and exchanges inside one SQL execution. Use Graph to locate the stage, then SQL to explain the work.</span>
     </div>
   </div>
   <div class="mental-panel plan-panel">
@@ -787,14 +806,20 @@ zoom: 0.85
 
 <style>
 @import './styles/index.css';
+
+.sql-tab-grid .mental-copy { gap: 0.7rem; }
+.sql-tab-grid .mental-definition { font-size: 1.65rem; }
+.sql-tab-grid .mental-detail { gap: 0.25rem; padding-top: 0.6rem; font-size: 0.88rem; line-height: 1.25; }
 </style>
 
 <!--
 The SQL tab connects the runtime evidence back to the physical work Spark chose.
 
+It lives in the Spark UI for a running application and in the Spark History Server for a completed application. The Fabric History Server's Graph tab is the job-level map: it shows how stages connect and lets us select the expensive stage. The SQL tab is the query-level explanation of that stage: it shows the operators, exchanges, and metrics that produced the work.
+
 Read this plan from the scans upward. Both sides pass through an Exchange, so Spark redistributes both datasets before the sort-merge join. Those exchanges explain the stage boundaries visible elsewhere in the UI.
 
-Use operator metrics to connect an expensive stage to a join, aggregation, scan, or write. The metrics tell you what hurts; the plan explains why that work exists.
+Use Graph to find the stage, then use SQL to explain why it exists. Use operator metrics to connect an expensive stage to a join, aggregation, scan, or write. The metrics tell you what hurts; the plan explains why that work exists.
 -->
 
 ---
@@ -987,7 +1012,14 @@ zoom: 0.85
   <div class="lens-card ended-lens"><span>ENDED</span><b>Spark History Server</b><small>post-mortem analysis</small></div>
 </div>
 
-<div class="notebook-shortcut"><b>Notebook shortcut:</b> cell progress → <strong>Spark UI</strong> while the application is running.</div>
+<div class="live-notebook-card">
+  <div class="live-notebook-status">LIVE</div>
+  <div>
+    <span>NOTEBOOK APPLICATION RUNNING</span>
+    <b>Cell progress → Spark UI</b>
+    <small>Open the live Spark UI directly from the running notebook cell.</small>
+  </div>
+</div>
 
 <style>
 .fabric-route-map {
@@ -1102,13 +1134,43 @@ zoom: 0.85
 .lens-card small { color: #475569; font-size: 0.65rem; }
 .live-lens { border: 1px solid #86efac; background: #f0fdf4; color: #166534; }
 .ended-lens { border: 1px solid #c4b5fd; background: #f5f3ff; color: #5b21b6; }
-.notebook-shortcut {
-  margin-top: 0.65rem;
-  color: #475569;
-  font-size: 0.78rem;
-  text-align: center;
+.live-notebook-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.7rem;
+  border: 2px solid #22c55e;
+  border-radius: 0.75rem;
+  background: #f0fdf4;
+  padding: 0.65rem 0.85rem;
+  color: #166534;
 }
-.notebook-shortcut strong { color: #166534; }
+.live-notebook-status {
+  border-radius: 999px;
+  background: #16a34a;
+  padding: 0.3rem 0.5rem;
+  color: white;
+  font-size: 0.58rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+.live-notebook-card span {
+  display: block;
+  font-size: 0.6rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+.live-notebook-card b {
+  display: block;
+  margin-top: 0.1rem;
+  font-size: 0.9rem;
+}
+.live-notebook-card small {
+  display: block;
+  margin-top: 0.15rem;
+  color: #475569;
+  font-size: 0.65rem;
+}
 </style>
 
 <!--
@@ -1754,7 +1816,7 @@ zoom: 0.85
 .case0-task-head { background: #f1f5f9; color: #64748b; font-size: 0.6rem; font-weight: 900; text-transform: uppercase; }
 .case0-task-row { border-top: 1px solid #f1f5f9; }
 .case0-task-row > span:first-of-type { position: relative; height: 1.1rem; border-radius: 0.25rem; background: #f1f5f9; line-height: 1.1rem; text-align: right; }
-.case0-task-row i { position: absolute; inset: 0 auto 0 0; z-index: 0; border-radius: 0.25rem; background: #fda4af; }
+.case0-task-row i { position: absolute; inset: 0 auto 0 0; z-index: -1; max-width: calc(100% - 3.2rem); border-radius: 0.25rem; background: #fda4af; }
 .case0-task-row span { isolation: isolate; }
 .case0-plan {
   display: grid;
@@ -1835,36 +1897,17 @@ Run the fixed application with the same full-history input and business logic, c
 
 ---
 
-# Case 0: video placeholder
+# Case 0: recorded walkthrough
 
-<div class="video-placeholder">
-  <video controls class="case-video" src="./videos/case0_recording.mp4"></video>
-</div>
-
+<video controls class="case-video" src="./videos/case0_recording.mp4"></video>
 
 <style>
-.video-placeholder {
-  display: flex;
-  min-height: 27rem;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  border: 2px dashed #94a3b8;
-  border-radius: 1.25rem;
-  background: repeating-linear-gradient(135deg, #f8fafc, #f8fafc 0.8rem, #f1f5f9 0.8rem, #f1f5f9 1.6rem);
-  text-align: center;
-}
 .case-video {
   display: block;
   width: 100%;
-  max-height: 24rem;
+  max-height: 27rem;
   object-fit: contain;
 }
-
-.video-icon { color: #2563eb; font-size: 3.5rem; }
-.video-placeholder h2 { margin: 0.6rem 0 0; color: #1e3a8a; }
-.video-placeholder p { color: #64748b; }
-.video-placeholder code { color: #475569; }
 </style>
 
 ---
@@ -2090,6 +2133,9 @@ Return to Stage 8 and check spill and shuffle fetch wait. Both total zero. The h
 [click]
 6 · TEST
 State one hypothesis: the STANDARD fare rule is shared by most Yellow Taxi rows. Hashing fare_rule alone sends all STANDARD records to one of the 256 reducer partitions, producing the 105.72-million-row task.
+
+Explain the solution in plain language: a **salt** is an extra deterministic bucket number added to the join key. Give each trip a salt from 0 to 8,191, then copy the eight-row rule table once for every salt and join on `(fare_rule, salt)`. The STANDARD trips are now spread across many `(STANDARD, salt)` partitions instead of one hot `STANDARD` partition. This is not password encryption; it is a partitioning trick to break up a hot key. In production, also consider broadcasting a genuinely tiny lookup table or enabling AQE skew-join handling; this demo uses salting to make the fix visible while keeping the shuffled join.
+
 Run case1_data_skew/fixed.py as a separate application. It adds one of 8,192 deterministic salts to each trip, replicates the eight-row rule dimension across those salts, and joins on fare_rule plus salt. The shuffle still has 256 partitions and the output columns and business rows stay the same. Broadcast remains disabled so this tests skew rather than changing the join into the Case 2 broadcast example.
 No fixed-run event log is included here, so do not claim a measured speedup yet. In the fixed application's History Server, compare the equivalent join stage's duration, maximum-to-mean data read, maximum task duration, and output row count. The output should remain 119,136,044 rows. A flatter distribution and shorter join stage support the hypothesis; unchanged skew rejects it.
 -->
