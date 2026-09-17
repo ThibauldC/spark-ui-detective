@@ -362,37 +362,6 @@ Start on the left: the notebook submits an action to the driver. The driver is t
 
 The driver fans work out to multiple worker nodes. Each worker hosts an executor with several parallel slots, so partitions can be processed at the same time. More workers mean more possible parallelism.
 -->
----
-
-# Spark UI mental model
-
-<div class="mental-eyebrow text-blue-700">1 application &rarr; # jobs &rarr; # stages &rarr; tasks</div>
-
-<div class="mental-hierarchy">
-  <div class="hierarchy-topline"><b>APPLICATION</b><span>SparkSession</span></div>
-  <div class="hierarchy-layout">
-    <div class="hierarchy-job">
-      <div class="hierarchy-job-head"><b>JOB</b><span>action: save()</span></div>
-      <div class="hierarchy-stage">
-        <div class="hierarchy-stage-head"><b>STAGE 0</b><span>4 tasks</span></div>
-        <div class="hierarchy-tasks four"><span>task</span><span>task</span><span>task</span><span>task</span></div>
-      </div>
-      <div class="hierarchy-shuffle">↕ &nbsp; shuffle &nbsp; ↕</div>
-      <div class="hierarchy-stage">
-        <div class="hierarchy-stage-head"><b>STAGE 1</b><span>3 tasks</span></div>
-        <div class="hierarchy-tasks three"><span>task</span><span>task</span><span>task</span></div>
-      </div>
-    </div>
-    <div class="hierarchy-other-jobs"><div>JOB</div><div>JOB</div><div>JOB</div></div>
-  </div>
-</div>
-
-<!--
-Notebook creates SparkSession, or Spark application.
-
-Stage: groups operations that Spark can pipeline without redistributing data. Shuffle is the boundary. Talk about wide vs narrow transformations?
-An application can contain multiple jobs. An action triggers a job, a shuffle separates stages, and each stage runs one task per partition.
--->
 
 ---
 
@@ -2140,7 +2109,11 @@ Return to Stage 8 and check spill and shuffle fetch wait. Both total zero. The h
 6 · TEST
 State one hypothesis: the STANDARD fare rule is shared by most Yellow Taxi rows. Hashing fare_rule alone sends all STANDARD records to one of the 256 reducer partitions, producing the 105.72-million-row task.
 
-Explain the solution in plain language: a **salt** is an extra deterministic bucket number added to the join key. Give each trip a salt from 0 to 8,191, then copy the eight-row rule table once for every salt and join on `(fare_rule, salt)`. The STANDARD trips are now spread across many `(STANDARD, salt)` partitions instead of one hot `STANDARD` partition. This is not password encryption; it is a partitioning trick to break up a hot key. In production, also consider broadcasting a genuinely tiny lookup table or enabling AQE skew-join handling; this demo uses salting to make the fix visible while keeping the shuffled join.
+Explain the solution in plain language: a **salt** is an extra deterministic bucket number added to the join key. Give each trip a salt from 0 to 8,191, then copy the eight-row rule table once for every salt and join on `(fare_rule, salt)`. The STANDARD trips are now spread across many `(STANDARD, salt)` partitions instead of one hot `STANDARD` partition. This is not password encryption; it is a partitioning trick to break up a hot key.
+
+Analogy for the room: one supermarket checkout lane gets 95% of shoppers while seven other lanes sit empty. Salting relabels those shoppers into 8,192 sub-groups so they queue across many lanes even though they're buying the same thing. After the join, the salt column is dropped — same rows, same schema, just spread across many tasks instead of piled on one.
+
+Be upfront that broadcasting the eight-row rule table would work even better here, and would remove the skew problem entirely rather than just spreading it out: with a broadcast join there is no shuffle on the fact side at all, so no single reducer can ever become a hot spot.
 
 Run case1_data_skew/fixed.py as a separate application. It adds one of 8,192 deterministic salts to each trip, replicates the eight-row rule dimension across those salts, and joins on fare_rule plus salt. The shuffle still has 256 partitions and the output columns and business rows stay the same. Broadcast remains disabled so this tests skew rather than changing the join into the Case 2 broadcast example.
 No fixed-run event log is included here, so do not claim a measured speedup yet. In the fixed application's History Server, compare the equivalent join stage's duration, maximum-to-mean data read, maximum task duration, and output row count. The output should remain 119,136,044 rows. A flatter distribution and shorter join stage support the hypothesis; unchanged skew rejects it.
@@ -2149,8 +2122,6 @@ No fixed-run event log is included here, so do not claim a measured speedup yet.
 ---
 
 # Case 2: add boroughs to every route
-
-<div class="text-sm font-bold tracking-widest text-blue-700">READ THE WORKLOAD BEFORE READING THE UI</div>
 
 <div class="grid grid-cols-2 gap-6 mt-6">
   <div class="rounded-2xl border border-blue-200 bg-blue-50 p-6">
@@ -2169,6 +2140,12 @@ No fixed-run event log is included here, so do not claim a measured speedup yet.
   </div>
 </div>
 
+<!--
+There is a PU/DO location id in the taxi data.
+
+pickup/drop-off route pairs built using cross join
+-->
+
 ---
 clicks: 3
 zoom: 0.85
@@ -2183,16 +2160,17 @@ zoom: 0.85
   <div class="grid grid-cols-[1.7fr_0.8fr] gap-6 mt-2">
     <div class="case2-stage-list">
       <div class="case2-stage-row header"><span>Evidence</span><span>Wall time</span><span>Tasks</span><span>Shuffle</span></div>
-      <div class="case2-stage-row"><span>Main route-summary SQL execution</span><span><b>141.4s</b></span><span>—</span><span>—</span></div>
-      <div class="case2-stage-row scan"><span><b>Stage 13</b> · fact scan + join exchange</span><span><b>61.7s</b></span><span>53</span><span><b>5.31 GiB write</b></span></div>
-      <div class="case2-stage-row suspect"><span><b>Stage 17</b> · sort-merge join + partial aggregate</span><span><b>69.3s</b></span><span>256</span><span><b>5.31 GiB read</b></span></div>
-      <div class="case2-stage-row"><span><b>Stage 21</b> · final aggregate + Delta write</span><span>9.4s</span><span>256</span><span>0.96 MiB read</span></div>
+      <div class="case2-stage-row"><span>Main route-summary SQL execution</span><span><b>102.0s</b></span><span>—</span><span>—</span></div>
+      <div class="case2-stage-row scan"><span><b>Stage 20</b> · fact scan + join exchange</span><span><b>50.7s</b></span><span>53</span><span><b>5.31 GiB write</b></span></div>
+      <div class="case2-stage-row"><span><b>Stage 21</b> · route exchange <small>(waits 46.9s)</small></span><span>47.5s</span><span>1</span><span>1.33 MiB write</span></div>
+      <div class="case2-stage-row suspect"><span><b>Stage 24</b> · sort-merge join + partial aggregate</span><span><b>46.8s</b></span><span>256</span><span><b>5.31 GiB read</b></span></div>
+      <div class="case2-stage-row"><span><b>Stage 28</b> · final aggregate + Delta write</span><span>3.9s</span><span>256</span><span>0.96 MiB read</span></div>
     </div>
     <div class="case2-verdict violet">
       <span>JOIN PATH</span>
-      <b>131.1s</b>
-      <small>93% of the 141.4s SQL execution</small>
-      <p>The fact-side exchange and shuffled join account for almost the whole query.</p>
+      <b>97.5s</b>
+      <small>96% of the 102.0s SQL execution</small>
+      <p>The 47.5s route stage is scheduler wait; the fact exchange and shuffled join are the cost.</p>
     </div>
   </div>
 </div>
@@ -2201,15 +2179,15 @@ zoom: 0.85
   <div class="text-sm font-bold tracking-widest text-rose-700">4 · INSPECT THE TASK SHAPE</div>
   <div class="grid grid-cols-[1.6fr_0.75fr] gap-6 mt-2">
     <div class="case2-task-chart">
-      <div class="case2-task-head"><span>Stage 17</span><span>Minimum</span><span>Median</span><span>Maximum</span></div>
-      <div class="case2-task-row"><b>Duration</b><span>0.289s</span><span><b>1.887s</b></span><span>6.613s</span></div>
+      <div class="case2-task-head"><span>Stage 24</span><span>Minimum</span><span>Median</span><span>Maximum</span></div>
+      <div class="case2-task-row"><b>Duration</b><span>0.242s</span><span><b>1.338s</b></span><span>4.172s</span></div>
       <div class="case2-task-row"><b>Shuffle read</b><span>3.24 MiB</span><span><b>19.93 MiB</b></span><span>72.45 MiB</span></div>
       <div class="case2-task-row"><b>Records read</b><span>142,011</span><span><b>927,943</b></span><span>3,301,492</span></div>
-      <div class="case2-task-row healthy"><b>Pressure checks</b><span>0 B spill</span><span>7 ms total fetch wait</span><span>256 tasks</span></div>
+      <div class="case2-task-row healthy"><b>Pressure checks</b><span>0 B spill</span><span>4 ms total fetch wait</span><span>256 tasks</span></div>
     </div>
     <div class="case2-verdict rose">
       <span>THE SHAPE</span>
-      <b>3.5×</b>
+      <b>3.1×</b>
       <small>max duration ÷ median</small>
       <p>This is broad work across 256 reducers, not Case 1's 789× straggler.</p>
     </div>
@@ -2227,8 +2205,8 @@ zoom: 0.85
   </div>
   <div class="grid grid-cols-3 gap-4 mt-5">
     <div class="case2-clue"><span>SQL PLAN</span><b>Exchanges on both inputs</b><small>The 259M-row fact side is repartitioned to join 70K routes.</small></div>
-    <div class="case2-clue"><span>STAGE 17</span><b>259.36M records read</b><small>5.31 GiB fact shuffle plus 1.33 MiB route shuffle.</small></div>
-    <div class="case2-clue"><span>PRESSURE CHECK</span><b>0 spill · 7 ms fetch wait</b><small>Sorting and joining every fact row explains the broad task cost.</small></div>
+    <div class="case2-clue"><span>STAGE 24</span><b>259.36M records read</b><small>5.31 GiB fact shuffle plus 1.33 MiB route shuffle.</small></div>
+    <div class="case2-clue"><span>PRESSURE CHECK</span><b>0 spill · 4 ms fetch wait</b><small>Sorting and joining every fact row explains the broad task cost.</small></div>
   </div>
   <div class="mt-5 text-center text-xl font-semibold">The small input is 0.02% of the fact row count, but the plan shuffles both sides.</div>
 </div>
@@ -2345,31 +2323,30 @@ zoom: 0.85
 </style>
 
 <!--
-Case 2 uses the completed bad run in case_2_logs. The log is now the correct route-enrichment application: application_1786346736130_0001. SQL execution 3 reads the 2019–2024 trip history, joins on PULocationID and DOLocationID, writes case2/bad, and contains the expected SortMergeJoin. Stage IDs can change on a rerun, so identify each stage by its task count, call site, and shuffle metrics.
+Case 2 uses `case2_logs_bad`. SQL execution 6, “CASE 2 BAD: route enrichment join,” reads the 2019–2024 trip history, joins on PULocationID and DOLocationID, writes `case2/bad`, and has the expected SortMergeJoin. Stage IDs can change on a rerun, so identify work by task count, call site, and shuffle metrics.
 
 3 · LOCALIZE
-Open Spark History Server → SQL and select execution 3 named “CASE 2 BAD: route enrichment join.” It lasts 141.374 seconds. The full application lasts 185.632 seconds, but the other SQL executions are Delta metadata and commit work; execution 3 contains the route-summary query we need to diagnose.
-Open Stages and follow the stages for jobs 8 through 11. Stage 13 scans 259,287,888 trip rows in 53 tasks and writes 5.31 GiB of serialized shuffle data in 61.741 seconds. Stage 17 runs the sort-merge join and partial borough aggregation in 256 tasks; it reads 5.31 GiB from the fact exchange plus 1.33 MiB from the route exchange and lasts 69.338 seconds. Stage 21 completes the borough aggregation and Delta write in 9.410 seconds.
-Stages 13 and 17 form the sequential fact-side join path and total 131.079 seconds, about 93% of the SQL execution. Stage 14 builds the route dimension from two 265-row zone scans. Its Cartesian product produces 70,225 rows and writes only 1.33 MiB. The Stages page shows 59.389 seconds of wall time because this one-task stage was submitted alongside the 53-task fact stage on the same eight-core executor; its executor run time is only 595 milliseconds. The route computation is small. Moving the fact table is the cost.
+Open SQL execution 6. It lasts 102.047 seconds. The full application lasts 140.128 seconds; setup, Delta metadata, and commit work account for the remainder.
+Stage 20 scans 259,287,888 trip rows in 53 tasks, lasts 50.742 seconds, and writes 5.31 GiB of serialized shuffle data. Stage 24 follows it: 256 tasks sort-merge the two inputs, partially aggregate the borough pairs, read 5.31 GiB from the fact exchange plus 1.33 MiB from the route exchange, and last 46.739 seconds. Stage 28 reads the 0.96 MiB partial aggregate, writes 64 output rows, and lasts 3.918 seconds.
+Do not add Stage 21's 47.546-second wall time to that path. It builds the 70,225 route rows, but its one task is launched 46.930 seconds after submission and runs for only 546 ms. It was submitted alongside the fact stage on the same eight-core executor and spent almost all of its displayed duration waiting for a slot. The route computation is small; moving the fact table is the cost.
 
 [click]
 4 · INSPECT
-Open Stage 17 and use Summary Metrics for Completed Tasks. The 256 task durations range from 0.289 to 6.613 seconds, with a 1.887-second median and 2.143-second mean. The maximum is 3.5 times the median, far below Case 1's 789-times straggler. All 256 tasks read shuffle data.
-Shuffle read ranges from 3.24 MiB to 72.45 MiB, with a 19.93 MiB median. Records read range from 142,011 to 3,301,492, with a median of 927,943. Fabric Diagnosis flags Stage 17 for data skew at 72.45 MB maximum versus 21.24 MB mean, so the distribution is not perfectly flat. The task timeline still shows broad work rather than one task holding the stage open.
-The stage reports zero disk spill and seven milliseconds of total shuffle fetch wait. With one eight-core executor, Spark runs the 256 reducers in roughly 32 waves. Their mean duration of 2.143 seconds predicts about 69 seconds of work across eight slots, which closely matches the 69.338-second stage. The cost is spread across the reducers.
+Open Stage 24 and use Summary Metrics for Completed Tasks. Its 256 task wall durations range from 0.242 to 4.172 seconds, with a 1.338-second median and 1.445-second mean. The maximum is 3.1 times the median, far below Case 1's 789-times straggler. All 256 tasks read shuffle data.
+Shuffle read ranges from 3.24 MiB to 72.45 MiB, with a 19.93 MiB median. Records read range from 142,011 to 3,301,492, with a median of 927,943. The distribution is not perfectly flat, but the task timeline shows broad work rather than one task holding the stage open.
+The stage reports zero disk spill and four milliseconds of total shuffle fetch wait. With one eight-core executor, Spark runs the 256 reducers in roughly 32 waves. Their 1.427-second mean executor runtime predicts about 45.7 seconds of work across eight slots, which matches the 46.739-second stage. The cost is spread across the reducers.
 
 [click]
 5 · CORRELATE
-Open the final physical plan for SQL execution 3. Read from both inputs into SortMergeJoin Inner. The fact branch contains Exchange hashpartitioning(PULocationID, DOLocationID, 256) followed by Sort. Its ShuffleQueryStage reports 259.29 million rows and 17.4 GiB of plan data. Stage task metrics report 5.31 GiB of serialized shuffle bytes written for the same 259,287,888 records.
-The route branch scans the 265-zone table twice, builds the 70,225-row Cartesian product, then also passes through Exchange and Sort. Its ShuffleQueryStage reports 70.2 thousand rows and 4.1 MiB of plan data; Stage 14 writes 1.33 MiB of serialized shuffle. The different GiB values come from different Spark UI metrics: plan data size versus shuffle bytes written.
-The SortMergeJoin outputs 259,287,888 rows. The partial HashAggregate reduces them to 7,254 rows, and the final aggregate writes 64 borough-pair rows. That final groupBy needs its own small exchange. The excessive shuffle is the earlier 5.31 GiB fact exchange required only by the merge join.
-Corroborate with Stage 17: 259,358,113 shuffle records read, zero spill, and seven milliseconds of fetch wait. The plan explains why every reducer has sorting and join work even though the route dimension is tiny.
+Open the final physical plan for SQL execution 6. Both inputs feed a SortMergeJoin Inner. The fact branch contains Exchange hashpartitioning(PULocationID, DOLocationID, 256) followed by Sort. Its ShuffleQueryStage reports 259.29 million rows and 17.4 GiB of plan data; Stage 20 writes 5.31 GiB of serialized shuffle bytes for the same 259,287,888 records.
+The route branch scans the 265-zone table twice, builds the 70,225-row Cartesian product, then passes through Exchange and Sort. Its ShuffleQueryStage reports 70.2 thousand rows and 4.1 MiB of plan data; Stage 21 writes 1.33 MiB of serialized shuffle. Plan data size and shuffle bytes are different Spark UI metrics.
+Stage 24 reads 259,358,113 shuffle records, emits 7,254 partial aggregates, and writes a 0.96 MiB final-aggregate shuffle. Stage 28 reduces that to 64 borough-pair rows. The final groupBy needs this small exchange. The excessive shuffle is the earlier 5.31 GiB fact exchange required only by the merge join.
 
 [click]
 6 · TEST
 State one hypothesis: Spark was forced to use a sort-merge join for a 70,225-row route dimension. That choice repartitions and sorts all 259,287,888 fact rows before the join.
-Run case2_excessive_shuffle/fixed.py as a separate application. It changes only the join hint by calling broadcast(routes). The expected physical plan contains BroadcastHashJoin and no Exchange on the trip branch before the join. The small final Exchange for groupBy(pickup_borough, dropoff_borough) should remain because broadcasting does not remove the aggregation shuffle.
-No fixed-run event log is included, so do not claim a measured speedup. Compare the join strategy, fact-side shuffle bytes, join-stage duration, joined row count, and the 64 final output rows. Removing the 5.31 GiB fact exchange while preserving the row counts supports the hypothesis. If the final plan still contains a fact-side Exchange before the join, the broadcast test did not take effect.
+Run `case2_excessive_shuffle/fixed.py` as a separate application. It changes only the join hint by calling `broadcast(routes)`. The expected physical plan contains BroadcastHashJoin and no Exchange on the trip branch before the join. The small final Exchange for groupBy(pickup_borough, dropoff_borough) remains because broadcasting does not remove the aggregation shuffle.
+Compare the join strategy, fact-side shuffle bytes, join-stage duration, joined row count, and the 64 final output rows. Removing the 5.31 GiB fact exchange while preserving the row counts supports the hypothesis. If the final plan still contains a fact-side Exchange before the join, the broadcast test did not take effect.
 -->
 
 ---
@@ -2394,6 +2371,41 @@ No fixed-run event log is included, so do not claim a measured speedup. Compare 
     <p class="mt-4 text-lg text-slate-700"><code>coalesce(1)</code> funnels every row into one task. That task must format, serialize, compress, and write the entire gzip stream while the other executor slots wait.</p>
   </div>
 </div>
+
+---
+
+# Case 2: recorded walkthrough
+
+<video controls class="case-video" src="./videos/case2_recording.mp4"></video>
+
+<style>
+.case-video {
+  display: block;
+  width: 100%;
+  max-height: 27rem;
+  object-fit: contain;
+}
+</style>
+
+<!--
+You will see that there is one stage which still takes some time. If you open that, you will see that stage actually has no quirky metrics, nothing out of the ordinary
+
+This might actually be a bad example because the full execution of the fixed case seems to be taking longer. But the actual execution is taking a lot less time:
+Yes—for the full application comparison, mostly.
+
+┌─────────────────────────────┬────────┬───────┐
+│ Interval                    │ Bad    │ Fixed │
+├─────────────────────────────┼────────┼───────┤
+│ App start → main SQL starts │ 36.2s  │ 73.1s │
+├─────────────────────────────┼────────┼───────┤
+│ Main SQL execution          │ 102.0s │ 57.1s │
+├─────────────────────────────┼────────┼───────┤
+│ SQL end → app end           │ 1.9s   │ 3.9s  │
+└─────────────────────────────┴────────┴───────┘
+
+
+The join was actually removed here, so the stage is not present
+-->
 
 ---
 clicks: 3
