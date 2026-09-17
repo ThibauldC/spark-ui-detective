@@ -77,11 +77,41 @@
 }
 
 .emfcc-speaker {
-  margin-top: 6.25rem;
+  margin-top: 5.25rem;
   color: var(--emfcc-gold);
   font-size: 2rem;
   font-weight: 700;
   text-transform: uppercase;
+}
+
+.emfcc-speaker-photo {
+  position: absolute;
+  top: 8rem;
+  left: 8.8rem;
+  width: 8.6rem;
+  height: 8.6rem;
+  border: 0.35rem solid rgb(255 255 255 / 0.9);
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.emfcc-speaker-details {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-top: 0.45rem;
+  color: white;
+  font-size: 1.1rem;
+  font-weight: 400;
+  text-transform: uppercase;
+}
+
+.belgian-flag {
+  display: inline-block;
+  width: 1.65rem;
+  height: 1.05rem;
+  background: linear-gradient(to right, #1e1e1e 0 33.33%, #fdda24 33.33% 66.66%, #ef3340 66.66%);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.55);
 }
 
 .emfcc-visually-hidden {

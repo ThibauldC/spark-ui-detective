@@ -22,10 +22,16 @@ class: emfcc-title
 
 <div class="emfcc-recording-notice">Do not record or livestream this session</div>
 
+<img src="./images/me.jpg" alt="Thibauld Croonenborghs" class="emfcc-speaker-photo" />
+
 <div class="emfcc-title-copy">
   <h1>The Spark Detective</h1>
   <h2>The curious case of the slow Spark job: a detective's toolbox</h2>
   <div class="emfcc-speaker">Thibauld Croonenborghs</div>
+  <div class="emfcc-speaker-details">
+    <span>Data Architect · AE NV · Belgium</span>
+    <span class="belgian-flag" aria-label="Belgium"></span>
+  </div>
 </div>
 
 <!--
