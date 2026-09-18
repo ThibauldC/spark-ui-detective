@@ -376,24 +376,24 @@ The driver fans work out to multiple worker nodes. Each worker hosts an executor
     <div class="action-callout"><b><code>write()</code></b> is the action: Spark must now do the work.</div>
   </div>
 
-  <div class="flow-arrow"><span>→</span><small>triggers</small></div>
+  <div class="flow-arrow" v-click="1"><span>→</span><small>triggers</small></div>
 
-  <div class="example-job">
+  <div class="example-job" v-click="1">
     <div class="example-job-head"><span>JOB 7</span><b>write()</b></div>
-    <div class="example-stage">
+    <div class="example-stage" v-click="2">
       <div class="example-stage-copy"><b>STAGE 0</b><small>read · filter · partial aggregate</small></div>
-      <div class="example-tasks blue"><i>Task 0</i><i>Task 1</i><i>Task 2</i><i>Task 3</i></div>
+      <div class="example-tasks blue" v-click="3"><i>Task 0</i><i>Task 1</i><i>Task 2</i><i>Task 3</i></div>
     </div>
-    <div class="example-shuffle"><b>↕ &nbsp; SHUFFLE &nbsp; ↕</b><span><code>groupBy("zone")</code> redistributes rows by zone</span></div>
-    <div class="example-stage">
+    <div class="example-shuffle" v-click="2"><b>↕ &nbsp; SHUFFLE &nbsp; ↕</b><span><code>groupBy("zone")</code> redistributes rows by zone</span></div>
+    <div class="example-stage" v-click="2">
       <div class="example-stage-copy"><b>STAGE 1</b><small>final aggregate · write</small></div>
-      <div class="example-tasks violet"><i>Task 0</i><i>Task 1</i><i>Task 2</i></div>
+      <div class="example-tasks violet" v-click="3"><i>Task 0</i><i>Task 1</i><i>Task 2</i></div>
     </div>
   </div>
 </div>
 
-<div class="action-summary">
-  <span><b>An action</b> creates a job</span><i>→</i><span><b>A shuffle</b> starts a new stage</span><i>→</i><span><b>Each partition</b> becomes a task</span>
+<div class="action-summary" v-click="1">
+  <span v-click="1"><b>An action</b> creates a job</span><i v-click="1">→</i><span v-click="2"><b>A shuffle</b> starts a new stage</span><i v-click="2">→</i><span v-click="3"><b>Each partition</b> becomes a task</span>
 </div>
 
 <style>
