@@ -2111,6 +2111,21 @@ No fixed-run event log is included here, so do not claim a measured speedup yet.
 
 ---
 
+# Case 1: recorded walkthrough
+
+<video controls class="case-video" src="./videos/case1_recording.mp4"></video>
+
+<style>
+.case-video {
+  display: block;
+  width: 100%;
+  max-height: 27rem;
+  object-fit: contain;
+}
+</style>
+
+---
+
 # Case 2: add boroughs to every route
 
 <div class="grid grid-cols-2 gap-6 mt-6">
@@ -2340,30 +2355,6 @@ Compare the join strategy, fact-side shuffle bytes, join-stage duration, joined 
 -->
 
 ---
-
-# Case 3: export one gzip CSV
-
-<div class="text-sm font-bold tracking-widest text-blue-700">READ THE WORKLOAD BEFORE READING THE UI</div>
-
-<div class="grid grid-cols-2 gap-6 mt-6">
-  <div class="rounded-2xl border border-blue-200 bg-blue-50 p-6">
-    <div class="text-sm font-bold tracking-widest text-blue-700">WHAT THE SCRIPT DOES</div>
-    <ol class="mt-4 space-y-3 text-lg text-slate-700">
-      <li><b>1.</b> Read 2023–2024 trips.</li>
-      <li><b>2.</b> Format timestamps and select ten columns.</li>
-      <li><b>3.</b> Combine the rows with <code>coalesce(1)</code>.</li>
-      <li><b>4.</b> Write a headered, gzip-compressed CSV.</li>
-    </ol>
-  </div>
-  <div class="rounded-2xl border-2 border-amber-300 bg-amber-50 p-6">
-    <div class="text-sm font-bold tracking-widest text-amber-700">WHY IT MIGHT FAIL</div>
-    <div class="mt-3 text-2xl font-bold text-slate-900">The output contract can erase Spark's parallelism.</div>
-    <p class="mt-4 text-lg text-slate-700"><code>coalesce(1)</code> funnels every row into one task. That task must format, serialize, compress, and write the entire gzip stream while the other executor slots wait.</p>
-  </div>
-</div>
-
----
-
 # Case 2: recorded walkthrough
 
 <video controls class="case-video" src="./videos/case2_recording.mp4"></video>
@@ -2396,6 +2387,29 @@ Yes—for the full application comparison, mostly.
 
 The join was actually removed here, so the stage is not present
 -->
+
+---
+
+# Case 3: export one gzip CSV
+
+<div class="text-sm font-bold tracking-widest text-blue-700">READ THE WORKLOAD BEFORE READING THE UI</div>
+
+<div class="grid grid-cols-2 gap-6 mt-6">
+  <div class="rounded-2xl border border-blue-200 bg-blue-50 p-6">
+    <div class="text-sm font-bold tracking-widest text-blue-700">WHAT THE SCRIPT DOES</div>
+    <ol class="mt-4 space-y-3 text-lg text-slate-700">
+      <li><b>1.</b> Read 2023–2024 trips.</li>
+      <li><b>2.</b> Format timestamps and select ten columns.</li>
+      <li><b>3.</b> Combine the rows with <code>coalesce(1)</code>.</li>
+      <li><b>4.</b> Write a headered, gzip-compressed CSV.</li>
+    </ol>
+  </div>
+  <div class="rounded-2xl border-2 border-amber-300 bg-amber-50 p-6">
+    <div class="text-sm font-bold tracking-widest text-amber-700">WHY IT MIGHT FAIL</div>
+    <div class="mt-3 text-2xl font-bold text-slate-900">The output contract can erase Spark's parallelism.</div>
+    <p class="mt-4 text-lg text-slate-700"><code>coalesce(1)</code> funnels every row into one task. That task must format, serialize, compress, and write the entire gzip stream while the other executor slots wait.</p>
+  </div>
+</div>
 
 ---
 clicks: 3
@@ -2593,6 +2607,40 @@ State one hypothesis: coalesce(1) enforces a one-partition, one-file contract, s
 Run case3_poor_parallelism/fixed.py as a separate application. It replaces coalesce(1) with repartition(OUTPUT_PARTITIONS), where OUTPUT_PARTITIONS is at least 64. The rows, columns, CSV format, and gzip compression stay the same. The contract changes from one file to a folder of gzip part files. A strict single gzip stream preserves the serial bottleneck.
 Repartitioning may add an Exchange and shuffle; that is the cost of creating parallel output partitions. Compare the write-stage duration, task count, executor timeline, output row count, and part-file count. The output should still contain 79,479,946 rows. At least 64 write tasks using more than one slot and a shorter write stage support the hypothesis.
 No fixed-run event log is included, so do not claim a measured speedup. If the fixed stage still has one task, inspect the final plan for a later coalesce or another single-partition requirement.
+-->
+---
+
+# Case 3: recorded walkthrough
+
+<video controls class="case-video" src="./videos/case3_recording.mp4"></video>
+
+<style>
+.case-video {
+  display: block;
+  width: 100%;
+  max-height: 27rem;
+  object-fit: contain;
+}
+</style>
+
+<!--
+You will see that there is one stage which still takes some time. If you open that, you will see that stage actually has no quirky metrics, nothing out of the ordinary
+
+This might actually be a bad example because the full execution of the fixed case seems to be taking longer. But the actual execution is taking a lot less time:
+Yes—for the full application comparison, mostly.
+
+┌─────────────────────────────┬────────┬───────┐
+│ Interval                    │ Bad    │ Fixed │
+├─────────────────────────────┼────────┼───────┤
+│ App start → main SQL starts │ 36.2s  │ 73.1s │
+├─────────────────────────────┼────────┼───────┤
+│ Main SQL execution          │ 102.0s │ 57.1s │
+├─────────────────────────────┼────────┼───────┤
+│ SQL end → app end           │ 1.9s   │ 3.9s  │
+└─────────────────────────────┴────────┴───────┘
+
+
+The join was actually removed here, so the stage is not present
 -->
 
 ---
