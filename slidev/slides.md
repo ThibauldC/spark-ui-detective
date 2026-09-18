@@ -92,9 +92,9 @@ zoom: 0.85
     <span class="notebook-caption">An action plugs into the driver.</span>
   </div>
 
-  <div class="topology-arrow">→ <span>submit</span></div>
+  <div class="topology-arrow" v-click="1">→ <span>submit</span></div>
 
-  <div class="architecture-driver">
+  <div class="architecture-driver" v-click="1">
     <div class="driver-kicker">DRIVER NODE</div>
     <div class="driver-title">Application coordinator</div>
     <div class="driver-copy">Plans the work, schedules it, and tracks progress.</div>
@@ -102,9 +102,9 @@ zoom: 0.85
   </div>
 </div>
 
-<div class="driver-branch"><span>schedule work to the cluster</span></div>
+<div class="driver-branch" v-click="2"><span>schedule work to the cluster</span></div>
 
-<div class="workers-area">
+<div class="workers-area" v-click="2">
   <div class="workers-heading">
     <b>WORKER NODES</b>
     <span>three shown · more can be added</span>
