@@ -1922,14 +1922,14 @@ zoom: 0.85
   <div class="grid grid-cols-[1.7fr_0.8fr] gap-6 mt-2">
     <div class="case1-stage-list">
       <div class="case1-stage-row header"><span>Evidence</span><span>Wall time</span><span>Tasks</span><span>Shuffle</span></div>
-      <div class="case1-stage-row"><span>Main SQL write execution</span><span><b>184.3s</b></span><span>—</span><span>—</span></div>
-      <div class="case1-stage-row scan"><span><b>Stage 4</b> · fact scan + exchange</span><span>48.3s</span><span>29</span><span>3.63 GiB write</span></div>
-      <div class="case1-stage-row suspect"><span><b>Stage 8</b> · join + parquet write</span><span><b>134.6s</b></span><span><b>256</b></span><span><b>3.63 GiB read</b></span></div>
+      <div class="case1-stage-row"><span>Main SQL write execution</span><span><b>186.1s</b></span><span>—</span><span>—</span></div>
+      <div class="case1-stage-row scan"><span><b>Stage 4</b> · fact scan + exchange</span><span>41.8s</span><span>29</span><span>3.63 GiB write</span></div>
+      <div class="case1-stage-row suspect"><span><b>Stage 8</b> · join + parquet write</span><span><b>142.3s</b></span><span><b>256</b></span><span><b>3.63 GiB read</b></span></div>
     </div>
     <div class="case1-verdict violet">
       <span>DOMINANT STAGE</span>
-      <b>134.6s</b>
-      <small>73% of the 184.3s SQL execution</small>
+      <b>142.3s</b>
+      <small>76% of the 186.1s SQL execution</small>
       <p>Open Stage 8. The scan finishes; the final join stage holds the application open.</p>
     </div>
   </div>
@@ -1940,14 +1940,14 @@ zoom: 0.85
   <div class="grid grid-cols-[1.6fr_0.75fr] gap-6 mt-2">
     <div class="case1-task-chart">
       <div class="case1-task-head"><span>Partition</span><span>Duration</span><span>Shuffle read</span><span>Rows read</span></div>
-      <div class="case1-task-row hot"><b>75</b><span><i style="width:100%"></i>134.47s</span><span>3.24 GiB</span><span>105.72M</span></div>
-      <div class="case1-task-row"><b>96</b><span><i style="width:14%"></i>18.60s</span><span>222.4 MiB</span><span>6.77M</span></div>
-      <div class="case1-task-row"><b>143</b><span><i style="width:11%"></i>14.34s</span><span>112.9 MiB</span><span>4.38M</span></div>
-      <div class="case1-task-row median"><b>Median</b><span><i style="width:1%"></i>0.171s</span><span>0 B</span><span>0</span></div>
+      <div class="case1-task-row hot"><b>75</b><span><i style="width:100%"></i>142.23s</span><span>3.24 GiB</span><span>105.72M</span></div>
+      <div class="case1-task-row"><b>96</b><span><i style="width:12%"></i>16.52s</span><span>222.4 MiB</span><span>6.77M</span></div>
+      <div class="case1-task-row"><b>143</b><span><i style="width:9%"></i>12.84s</span><span>112.9 MiB</span><span>4.38M</span></div>
+      <div class="case1-task-row median"><b>Median</b><span><i style="width:1%"></i>0.116s</span><span>0 B</span><span>0</span></div>
     </div>
     <div class="case1-verdict rose">
       <span>THE LONG TAIL</span>
-      <b>789×</b>
+      <b>1,226×</b>
       <small>max duration ÷ median</small>
       <p>Partition 75 receives 88.7% of all join rows. Only 8 of 256 tasks read any shuffle data.</p>
     </div>
@@ -1964,7 +1964,7 @@ zoom: 0.85
   </div>
   <div class="grid grid-cols-3 gap-4 mt-5">
     <div class="case1-clue"><span>DIAGNOSIS · DATA SKEW</span><b>3,319.71 MB max</b><small>versus 14.54 MB mean task data read</small></div>
-    <div class="case1-clue"><span>DIAGNOSIS · TIME SKEW</span><b>134.47s max</b><small>versus 0.93s mean task duration</small></div>
+    <div class="case1-clue"><span>DIAGNOSIS · TIME SKEW</span><b>142.23s max</b><small>versus 0.88s mean task duration</small></div>
     <div class="case1-clue"><span>STAGE 8</span><b>0 spill · 0 fetch wait</b><small>The straggler is processing the hot partition, not waiting on disk or network.</small></div>
   </div>
 </div>
@@ -2086,24 +2086,24 @@ zoom: 0.85
 </style>
 
 <!--
-Case 1 uses the completed bad run in case_1_logs. The values on this slide come from its Spark event records: application_1786019664543_0001, SQL execution 1, and its final join stage. Stage and task IDs can change on a rerun, so use the descriptions and metrics below rather than memorizing the numbers.
+Case 1 uses the completed bad run in case1_logs_bad. The values on this slide come from its Spark event records: application_1789645022336_0001, SQL execution 1, and its final join stage. Stage and task IDs can change on a rerun, so use the descriptions and metrics below rather than memorizing the numbers.
 
 3 · LOCALIZE
-Open the completed application in Spark History Server. In SQL, select the execution named “CASE 1 BAD: standard-rate hot join key.” The event log records a 184.3-second write execution and a final physical plan ending in WriteFiles.
-Open Stages and sort Completed Stages by Duration. Stage 8 is the parquet join-and-write stage: 256 tasks, 134.6 seconds, and 3.63 GiB of shuffle read. It consumes about 73% of the SQL execution. Stage 4 scans 119,136,044 fact rows and writes the same 3.63 GiB shuffle in 48.3 seconds, so the scan completes; the final stage explains the long tail.
+Open the completed application in Spark History Server. In SQL, select the execution named “CASE 1 BAD: standard-rate hot join key.” The event log records a 186.1-second write execution and a final physical plan ending in WriteFiles.
+Open Stages and sort Completed Stages by Duration. Stage 8 is the parquet join-and-write stage: 256 tasks, 142.3 seconds, and 3.63 GiB of shuffle read. It consumes about 76% of the SQL execution. Stage 4 scans 119,136,044 fact rows and writes the same 3.63 GiB shuffle in 41.8 seconds, so the scan completes; the final stage explains the long tail.
 Identify the stage by its 256 tasks, shuffle read, and parquet call site rather than by ID. Stage numbers may differ in another application.
 
 [click]
 4 · INSPECT
 Open Stage 8. First look at the event timeline: Task 89, for partition 75, starts with the first wave and extends almost to the end of the stage while the other task bars disappear.
-In Summary Metrics for Completed Tasks, compare maximum, mean, and median duration. Then use the Tasks table and sort by Duration and Shuffle Read Size. Partition 75 lasts 134.47 seconds, reads 3.24 GiB and 105,720,908 records, and writes 105,720,907 output rows. The median task lasts 0.171 seconds, making the maximum 789 times the median.
+In Summary Metrics for Completed Tasks, compare maximum, mean, and median duration. Then use the Tasks table and sort by Duration and Shuffle Read Size. Partition 75 lasts 142.23 seconds, reads 3.24 GiB and 105,720,908 records, and writes 105,720,907 output rows. The median task lasts 0.116 seconds, making the maximum 1,226 times the median.
 Only eight of the 256 tasks have nonzero shuffle read because the join key has only eight rule values. That alone is not the diagnosis. The decisive clue is that one partition owns 88.7% of all shuffle records; the next largest partitions read only 6.77 million and 4.38 million rows.
 
 [click]
 5 · CORRELATE
 In SQL, open the final physical plan for execution 1. Follow the fact scan to Exchange hashpartitioning(fare_rule, 256), Sort, SortMergeJoin LeftOuter, and WriteFiles. The final plan reports 119.14 million rows on the fact-side ShuffleQueryStage and only eight rows on the rule side. Broadcasting is disabled in this demo, so both sides pass through an Exchange and the shuffled join remains visible.
-Now open Diagnosis for job 5. Data Skew flags Stage 8 with 3,319.71 MB maximum task data read versus 14.54 MB mean. Time Skew flags the same stage with 134.47 seconds maximum versus 0.93 seconds mean. These values are persisted as Fabric advice events in case_1_logs; they independently confirm what the task table shows.
-Return to Stage 8 and check spill and shuffle fetch wait. Both total zero. The hot task spends 121.6 seconds of CPU time during its 134.5-second duration. In Executors, the application has one eight-core executor; after the short tasks finish, one core remains occupied by the hot partition while the other slots have no comparable work. This rules out disk spill and network wait and supports data skew at the join.
+Now open Diagnosis for job 5. Data Skew flags Stage 8 with 3,319.71 MB maximum task data read versus 14.54 MB mean. Time Skew flags the same stage with 142.23 seconds maximum versus 0.88 seconds mean. These values are persisted as Fabric advice events in case1_logs_bad; they independently confirm what the task table shows.
+Return to Stage 8 and check spill and shuffle fetch wait. Both total zero. The hot task spends 125.4 seconds of CPU time during its 142.2-second duration. In Executors, the application has one eight-core executor; after the short tasks finish, one core remains occupied by the hot partition while the other slots have no comparable work. This rules out disk spill and network wait and supports data skew at the join.
 
 [click]
 6 · TEST
@@ -2189,7 +2189,7 @@ zoom: 0.85
       <span>THE SHAPE</span>
       <b>3.1×</b>
       <small>max duration ÷ median</small>
-      <p>This is broad work across 256 reducers, not Case 1's 789× straggler.</p>
+      <p>This is broad work across 256 reducers, not Case 1's 1,226× straggler.</p>
     </div>
   </div>
 </div>
@@ -2332,7 +2332,7 @@ Do not add Stage 21's 47.546-second wall time to that path. It builds the 70,225
 
 [click]
 4 · INSPECT
-Open Stage 24 and use Summary Metrics for Completed Tasks. Its 256 task wall durations range from 0.242 to 4.172 seconds, with a 1.338-second median and 1.445-second mean. The maximum is 3.1 times the median, far below Case 1's 789-times straggler. All 256 tasks read shuffle data.
+Open Stage 24 and use Summary Metrics for Completed Tasks. Its 256 task wall durations range from 0.242 to 4.172 seconds, with a 1.338-second median and 1.445-second mean. The maximum is 3.1 times the median, far below Case 1's 1,226-times straggler. All 256 tasks read shuffle data.
 Shuffle read ranges from 3.24 MiB to 72.45 MiB, with a 19.93 MiB median. Records read range from 142,011 to 3,301,492, with a median of 927,943. The distribution is not perfectly flat, but the task timeline shows broad work rather than one task holding the stage open.
 The stage reports zero disk spill and four milliseconds of total shuffle fetch wait. With one eight-core executor, Spark runs the 256 reducers in roughly 32 waves. Their 1.427-second mean executor runtime predicts about 45.7 seconds of work across eight slots, which matches the 46.739-second stage. The cost is spread across the reducers.
 
