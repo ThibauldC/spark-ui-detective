@@ -518,20 +518,21 @@ Wide: input partitions will contribute to many output partitions
 
 # Spark UI in practice
 
-<img
-  src="./images/spark_ui_jobs.png"
-  alt="Spark UI Jobs tab"
-  class="spark-ui-jobs-screenshot"
-/>
+<div class="spark-ui-jobs-frame">
+  <img
+    src="./images/spark_ui_jobs.png"
+    alt="Spark UI Jobs tab"
+    class="spark-ui-jobs-screenshot"
+  />
+</div>
 
 <style>
-@import './styles/index.css';
 
 .spark-ui-jobs-screenshot {
   display: block;
   width: 100%;
-  max-height: 27rem;
-  margin-top: 1.25rem;
+  max-height: 22rem;
+  margin-top: 0.5rem;
   object-fit: contain;
   border: 1px solid #cbd5e1;
   border-radius: 1.25rem;
@@ -578,7 +579,6 @@ zoom: 0.85
 </div>
 
 <style>
-@import './styles/index.css';
 </style>
 
 <!--
@@ -633,7 +633,6 @@ zoom: 0.85
 </div>
 
 <style>
-@import './styles/index.css';
 </style>
 
 <!--
@@ -675,7 +674,6 @@ zoom: 0.85
 </div>
 
 <style>
-@import './styles/index.css';
 </style>
 
 <!--
@@ -718,7 +716,6 @@ zoom: 0.85
 </div>
 
 <style>
-@import './styles/index.css';
 </style>
 
 <!--
@@ -776,7 +773,6 @@ zoom: 0.85
 </div>
 
 <style>
-@import './styles/index.css';
 
 .sql-tab-grid .mental-copy { gap: 0.7rem; }
 .sql-tab-grid .mental-definition { font-size: 1.65rem; }
@@ -876,13 +872,12 @@ Keep this slide as the visual bridge from the mental model to the practical walk
 -->
 
 <style>
-@import './styles/index.css';
 
 .recent-runs-screenshot {
   display: block;
   width: 100%;
-  max-height: 27rem;
-  margin-top: 1.25rem;
+  max-height: 22rem;
+  margin-top: 0.5rem;
   object-fit: contain;
   border: 1px solid #cbd5e1;
   border-radius: 1.25rem;
@@ -903,13 +898,12 @@ Keep this slide as the visual bridge from the mental model to the practical walk
 />
 
 <style>
-@import './styles/index.css';
 
 .detail-monitoring-screenshot {
   display: block;
   width: 100%;
-  max-height: 25rem;
-  margin-top: 1.25rem;
+  max-height: 22rem;
+  margin-top: 0.5rem;
   object-fit: contain;
   border: 1px solid #cbd5e1;
   border-radius: 1.25rem;
@@ -936,8 +930,6 @@ zoom: 0.85
 ---
 
 # How to reach the right Spark lens
-
-<div class="mental-eyebrow text-blue-700">Start where the run is visible; its state chooses the final view</div>
 
 <div class="fabric-route-map">
   <div class="route-column route-starts">
@@ -2475,10 +2467,6 @@ zoom: 0.85
     <div class="hypothesis"><span>HYPOTHESIS</span><b>The one-file contract serializes the write</b><small>One task formats every row and produces one gzip stream.</small></div>
     <i>→</i>
     <div class="test"><span>ONE CHANGE</span><b><code>coalesce(1)</code> → at least 64 partitions</b><small>Keep the rows and gzip CSV format; write a folder of part files.</small></div>
-  </div>
-  <div class="case2-compare mt-6">
-    <span>RERUN AND COMPARE</span>
-    <b>Write-stage time</b><b>Task count</b><b>Active task slots</b><b>79,479,946 rows</b>
   </div>
 </div>
 
