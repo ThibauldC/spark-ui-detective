@@ -747,10 +747,6 @@ zoom: 0.85
       <b>Where it lives in the UI</b>
       <span>The <code>SQL</code> tab in Spark UI or Spark History Server. Select a SQL execution to inspect its physical plan and metrics.</span>
     </div>
-    <div class="mental-detail">
-      <b>How it relates to Graph</b>
-      <span>The Fabric History Server's <code>Graph</code> tab shows the job-level DAG and stage flow; SQL shows the operators and exchanges inside one SQL execution. Use Graph to locate the stage, then SQL to explain the work.</span>
-    </div>
   </div>
   <div class="mental-panel plan-panel">
     <div class="mental-panel-title">Physical plan · orders JOIN customers</div>
@@ -792,9 +788,11 @@ The SQL tab connects the runtime evidence back to the physical work Spark chose.
 
 It lives in the Spark UI for a running application and in the Spark History Server for a completed application. The Fabric History Server's Graph tab is the job-level map: it shows how stages connect and lets us select the expensive stage. The SQL tab is the query-level explanation of that stage: it shows the operators, exchanges, and metrics that produced the work.
 
-Read this plan from the scans upward. Both sides pass through an Exchange, so Spark redistributes both datasets before the sort-merge join. Those exchanges explain the stage boundaries visible elsewhere in the UI.
+Read this plan top-down, matching the Spark UI. Execution flows from the scans up through the Exchanges and sort-merge join to WriteFiles. Both sides pass through an Exchange, so Spark redistributes both datasets before the join; those exchanges explain the stage boundaries visible elsewhere in the UI.
 
 Use Graph to find the stage, then use SQL to explain why it exists. Use operator metrics to connect an expensive stage to a join, aggregation, scan, or write. The metrics tell you what hurts; the plan explains why that work exists.
+
+How it relates to Graph:<span>The Fabric History Server's <code>Graph</code> tab shows the job-level DAG and stage flow; SQL shows the operators and exchanges inside one SQL execution. Use Graph to locate the stage, then SQL to explain the work.</span>
 -->
 
 ---
