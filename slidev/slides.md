@@ -751,26 +751,26 @@ zoom: 0.85
   <div class="mental-panel plan-panel">
     <div class="mental-panel-title">Physical plan · orders JOIN customers</div>
     <div class="mental-plan">
-      <div class="mental-plan-node">WriteFiles <small>812 rows · 3.4 MB</small></div>
-      <div class="plan-line"></div>
-      <div class="mental-plan-node">SortMergeJoin <small>inner · customer_id</small></div>
-      <div class="plan-line"></div>
       <div class="plan-branches">
         <div class="plan-branch">
-          <div class="mental-plan-node exchange">Exchange (hash)<small>shuffle · 18 MB</small></div>
+          <div class="mental-plan-node compact">Scan orders</div>
           <div class="plan-line"></div>
           <div class="mental-plan-node compact">HashAggregate</div>
           <div class="plan-line"></div>
-          <div class="mental-plan-node compact">Scan orders</div>
+          <div class="mental-plan-node exchange">Exchange (hash)<small>shuffle · 18 MB</small></div>
         </div>
         <div class="plan-branch">
-          <div class="mental-plan-node exchange">Exchange (hash)<small>shuffle · 4 MB</small></div>
+          <div class="mental-plan-node compact">Scan customers</div>
           <div class="plan-line"></div>
           <div class="mental-plan-node compact">Filter active</div>
           <div class="plan-line"></div>
-          <div class="mental-plan-node compact">Scan customers</div>
+          <div class="mental-plan-node exchange">Exchange (hash)<small>shuffle · 4 MB</small></div>
         </div>
       </div>
+      <div class="plan-line"></div>
+      <div class="mental-plan-node">SortMergeJoin <small>inner · customer_id</small></div>
+      <div class="plan-line"></div>
+      <div class="mental-plan-node">WriteFiles <small>812 rows · 3.4 MB</small></div>
     </div>
   </div>
 </div>
@@ -788,7 +788,7 @@ The SQL tab connects the runtime evidence back to the physical work Spark chose.
 
 It lives in the Spark UI for a running application and in the Spark History Server for a completed application. The Fabric History Server's Graph tab is the job-level map: it shows how stages connect and lets us select the expensive stage. The SQL tab is the query-level explanation of that stage: it shows the operators, exchanges, and metrics that produced the work.
 
-Read this plan top-down, matching the Spark UI. Execution flows from the scans up through the Exchanges and sort-merge join to WriteFiles. Both sides pass through an Exchange, so Spark redistributes both datasets before the join; those exchanges explain the stage boundaries visible elsewhere in the UI.
+Read this plan top-down, matching the Spark UI. Data flows from the scans down through the Exchanges and sort-merge join to WriteFiles. Both sides pass through an Exchange, so Spark redistributes both datasets before the join; those exchanges explain the stage boundaries visible elsewhere in the UI.
 
 Use Graph to find the stage, then use SQL to explain why it exists. Use operator metrics to connect an expensive stage to a join, aggregation, scan, or write. The metrics tell you what hurts; the plan explains why that work exists.
 
