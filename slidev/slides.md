@@ -35,8 +35,13 @@ class: emfcc-title
 </div>
 
 <!--
-This is a practical investigation, not a Spark UI tour.
-Set expectations that the first part of the talk covers the mystery and the mental model needed to read Spark UI evidence.
+
+Who is working with Spark in Fabric?
+Who has already worked with the Spark UI?
+Who has already diagnosed a problem using the Spark UI?
+
+This is a practical investigation.
+I don’t want you to learn how to solve every issue in spark. Also in the practical cases I will throw some technical terms around (like sortmergejoin, broadcase join, etx.) the goal of this session is not to remember them, but the goal is to give you a reusable workflow to find possible issues using the Spark UI.
 -->
 
 ---
@@ -71,9 +76,8 @@ blockquote {
 </style>
 
 <!--
-Use this slide to create tension. Do not explain the answer yet.
 Emphasize that Spark performance problems often do not fail loudly; they leave clues in runtime, stages, tasks, shuffle, spill, and executor behavior.
-The audience should feel the common pain: same notebook, same code, very different runtime.
+sometimes jobs fail and it is a mystery. You will become the detective and need to follow the clues, do your due dilligence and find the culprit to the crime 
 -->
 
 ---
@@ -107,7 +111,6 @@ zoom: 0.85
 <div class="workers-area" v-click="2">
   <div class="workers-heading">
     <b>WORKER NODES</b>
-    <span>three shown · more can be added</span>
   </div>
 
   <div class="worker-grid">
@@ -360,7 +363,14 @@ The Spark cluster is created as follows: 1 driver, 1 or more workers or nodes
 
 Start on the left: the notebook submits an action to the driver. The driver is the coordinator. It plans the work, schedules it, and tracks progress; it is not where all the rows are processed. Notebook asks SparkSession this is a driver process. SparkSession manages Spark application (1-to-1 relation)
 
+When an action runs—such as count(), show(), collect(), or write()—the driver:
+     - analyzes and optimizes the logical plan
+     - chooses a physical plan, such as Filter, Exchange, or SortMergeJoin
+     - splits it into stages at shuffle boundaries
+     - sends tasks to executors
+
 The driver fans work out to multiple worker nodes. Each worker hosts an executor with several parallel slots, so partitions can be processed at the same time. More workers mean more possible parallelism.
+Executors process their assigned partitions. They read data, run the pipelined operators, perform shuffles where necessary, and return results or write output.
 -->
 
 ---
@@ -500,18 +510,15 @@ The driver fans work out to multiple worker nodes. Each worker hosts an executor
 </style>
 
 <!--
+spark hierarchy of execution 
+
 2 types of building blocks in a Spark job: A transformation creates a new RDD/DataFrame from an existing one (it describes a step in your pipeline - like a select, filter, join etc) and is evaluated lazily. An action asks Spark to materialize a result (return to the driver, write to storage, or otherwise “finish” the computation), which is what triggers a job in Spark’s execution model.
 
-Stage 0 reads, filters, and performs a partial aggregate across four partitions, so it has four tasks. groupBy redistributes rows by zone: that shuffle ends Stage 0. Stage 1 performs the final aggregate and writes its three output partitions.
-
-Say the chain once: action creates a job; shuffle starts a new stage; each partition becomes a task. The previous slide provides the zoomed-out hierarchy; this is the concrete execution it represents.
+Stage 0 reads, filters, and performs a partial aggregate across four partitions, so it has four tasks. 
+A task processes one partition and can pipeline several narrow operations without materializing intermediate results: read → select → filter → map
+groupBy redistributes rows by zone: that shuffle ends Stage 0. Stage 1 performs the final aggregate and writes its three output partitions.
 
 Clarify the potentially confusing `count()` here: `groupBy("zone").count()` is a grouped DataFrame aggregation that returns a new DataFrame, so it is still lazy in this chain. A standalone `df.count()` is different: it is an action, materializes the result, and creates a job. In this example the final `write()` is the action that triggers the whole plan.
-
-The shuffle is the important exception to the simple fan-out picture: records cross worker boundaries so that equal keys meet before the next phase. That data movement is why a shuffle becomes a stage boundary in the Spark UI. Shuffles are triggered by something called wide transformations. Wide vs narrow transformations
-
-Narrow: transformations for which each input partition will contribute to only one output partition (filter)
-Wide: input partitions will contribute to many output partitions
 -->
 
 ---
@@ -541,12 +548,12 @@ Wide: input partitions will contribute to many output partitions
 </style>
 
 <!--
-This is the standard Jobs-tab view. For a completed run in Fabric, the Spark History Server adds two useful investigation views:
+Fabric: extended history server. For a completed run in Fabric, the Spark History Server adds two useful investigation views:
 
 - **Graph**: select a Job ID, then open Graph to see the job DAG and its stage flow. Switch between progress, read, and written data; select a stage node to open its stage details. Use it to understand how the stages connect and where the work is concentrated.
 - **Diagnosis**: select a Job ID, then open Diagnosis. Fabric highlights Data Skew, Time Skew, and Executor Usage Analysis. These are shortcuts to patterns we could otherwise find manually in task tables and executor timelines.
 
-The Graph tab gives the map; Diagnosis points at suspicious patterns. Neither replaces the task table: use the graph to choose where to drill in, then verify the signal in stage and task metrics.
+Also add things like: snapshot-based loading and executor rolling logs
 -->
 
 ---
@@ -636,7 +643,10 @@ zoom: 0.85
 </style>
 
 <!--
-A stage groups operations that Spark can pipeline without redistributing data. The important boundary is the shuffle.
+A stage groups operations that Spark can pipeline without redistributing data. The important boundary is the shuffle. Shuffles are triggered by something called wide transformations
+Narrow: transformations for which each input partition will contribute to only one output partition (filter)
+Wide: input partitions will contribute to many output partitions
+a join is logically a transformation, but whether it creates a wide dependency depends on the physical join strategy.
 
 Here Spark scans, filters, and performs a partial aggregation in Stage 12. The shuffle redistributes records by key. Stage 13 can then finish the aggregation and write the result.
 
@@ -677,6 +687,9 @@ zoom: 0.85
 </style>
 
 <!--
+why does this view matter? They say a chain is only as strong as its weakest link. Well, a stage is only as fast as its slowest task.
+ The Task view is useful because job-level or stage-level averages can hide the actual bottleneck.
+
 A task is the same stage logic applied to one partition. Two hundred partitions produce two hundred tasks for that stage.
 
 That relationship makes the task table diagnostic. Most tasks here finish in under half a second, but Task 2 takes more than eight seconds. The stage cannot finish until its slowest task does.
@@ -737,12 +750,12 @@ zoom: 0.85
     <div class="mental-kicker text-amber-700">The SQL tab is…</div>
     <div class="mental-definition">The <b>physical plan</b> Spark actually chose for a SQL or DataFrame query.</div>
     <div class="mental-detail">
-      <b>Why useful</b>
-      <span>Jobs and stages show <i>what</i> ran. The SQL plan explains <b>why</b>. Connect an expensive stage to a join, aggregation, scan, or write.</span>
-    </div>
-    <div class="mental-detail">
       <b>Where it lives in the UI</b>
       <span>The <code>SQL</code> tab in Spark UI or Spark History Server. Select a SQL execution to inspect its physical plan and metrics.</span>
+    </div>
+    <div class="mental-detail">
+      <b>Why useful</b>
+      <span>Jobs and stages show <i>what</i> ran. The SQL plan explains <b>why</b>. Connect an expensive stage to a join, aggregation, scan, or write.</span>
     </div>
   </div>
   <div class="mental-panel plan-panel">
@@ -776,17 +789,14 @@ zoom: 0.85
 
 .sql-tab-grid .mental-copy { gap: 0.7rem; }
 .sql-tab-grid .mental-definition { font-size: 1.65rem; }
-.sql-tab-grid .mental-detail { gap: 0.25rem; padding-top: 0.6rem; font-size: 0.88rem; line-height: 1.25; }
 </style>
 
 <!--
-The SQL tab connects the runtime evidence back to the physical work Spark chose.
+The SQL tab connects the runtime evidence back to the physical work Spark chose. The SQL tab is the query-level explanation of a stage: it shows the operators, exchanges, and metrics that produced the work.
 
-It lives in the Spark UI for a running application and in the Spark History Server for a completed application. The Fabric History Server's Graph tab is the job-level map: it shows how stages connect and lets us select the expensive stage. The SQL tab is the query-level explanation of that stage: it shows the operators, exchanges, and metrics that produced the work.
+Read this plan top-down. Data flows from the scans down through the Exchanges and sort-merge join to WriteFiles. Both sides pass through an Exchange, so Spark redistributes both datasets before the join; those exchanges explain the stage boundaries visible elsewhere in the UI.
 
-Read this plan top-down, matching the Spark UI. Data flows from the scans down through the Exchanges and sort-merge join to WriteFiles. Both sides pass through an Exchange, so Spark redistributes both datasets before the join; those exchanges explain the stage boundaries visible elsewhere in the UI.
-
-Use Graph to find the stage, then use SQL to explain why it exists. Use operator metrics to connect an expensive stage to a join, aggregation, scan, or write. The metrics tell you what hurts; the plan explains why that work exists.
+You could also use Graph.
 
 How it relates to Graph:<span>The Fabric History Server's <code>Graph</code> tab shows the job-level DAG and stage flow; SQL shows the operators and exchanges inside one SQL execution. Use Graph to locate the stage, then SQL to explain the work.</span>
 -->
@@ -850,9 +860,6 @@ It is still possible to construct the UI of an application through Spark’s his
 </div>
 
 <!--
-Keep this orientation deliberately short. The goal is just to anchor Spark UI inside the Fabric experience.
-Explain that live Spark UI is for active applications, while History Server is for completed or failed applications.
-If the audience does not know which run is relevant, they should start in Monitor hub or Recent runs before drilling into Spark internals.
 -->
 ---
 
@@ -867,8 +874,6 @@ If the audience does not know which run is relevant, they should start in Monito
 />
 
 <!--
-Add the Spark UI screenshot here before moving into the individual tabs.
-Keep this slide as the visual bridge from the mental model to the practical walkthrough.
 -->
 
 <style>
@@ -1185,8 +1190,6 @@ I will use this field guide for every case in the rest of the session. The data 
 [click] Correlate that stage with the SQL plan, executors, Fabric Diagnosis views, and logs. Each view should support or challenge the same explanation.
 
 [click] Test one hypothesis. Change one thing, rerun, and compare the same evidence.
-
-Say the verbs once more: Find. Choose. Localize. Inspect. Correlate. Test.
 -->
 
 ---
@@ -1226,10 +1229,6 @@ Start with the question from the opening: yesterday took 12 minutes and today to
 Use Monitor hub when you need to search across workspace activity. Use Recent runs when you begin from a notebook, Spark Job Definition, or pipeline. Open the application details page once you have the application.
 
 Then choose the evidence source. A running application gives us the live Spark UI. A completed or failed application gives us the History Server. The application details page remains useful for resources, logs, and operational context.
-
-Fabric's extended History Server also has Diagnosis views for data skew, time skew, and executor usage. We will use those views to confirm evidence later. They do not replace choosing the correct application.
-
-Transition: now we have the right case file and the right lens. We can ask where the time went.
 -->
 
 <style>
@@ -1328,15 +1327,11 @@ zoom: 0.85
 
 
 <!--
-Give the audience a few seconds to scan the table. Ask: which row would you open first?
-
 Stage 8 took 36 minutes and 42 seconds. The other visible stages took about one or two minutes. Stage 8 accounts for most of this application's runtime, so it becomes our investigation boundary.
 
 The row gives us early clues. It processed 86 GB of shuffle and spilled 41 GB. Those numbers deserve attention (this is sus), but they do not prove a cause. A large shuffle can be expected. As with a real criminal case we need multiple pieces of evidence to prove someone is guilty. Spill can hurt without explaining the full delay. We need the task detail next.
 
-Also check failed and retried stages. A stage may appear several times because Spark retried it, which can hide the true cost if you inspect only the final successful attempt. An unusual task count can expose poor parallelism before you open the stage.
-
-The discipline here saves time: rank stages by their contribution to runtime, then open the one that can explain the symptom.
+**Also check failed and retried stages**. A stage may appear several times because Spark retried it, which can hide the true cost if you inspect only the final successful attempt. An unusual task count can expose poor parallelism before you open the stage.
 -->
 
 ---
@@ -1428,9 +1423,16 @@ The middle shape has a long tail. Most tasks finish, while one task keeps the st
 
 On the right, many tasks consume substantial time. Check spill, GC time, shuffle fetch wait, scheduler delay, and retries. These metrics separate memory pressure, data movement, scheduling, and unstable execution.
 
-Use medians, percentiles, and the task table where available. An average blends the fast majority with the expensive tail.
+far left vs far right: Both can have the same root cause, such as:
 
-We will recall these three shapes in the cases: balanced with spill, a skewed long tail, and broad pressure from shuffle or weak parallelism.
+ - large shuffle
+ - disk spill
+ - high GC
+ - expensive CPU work
+ - slow external I/O
+ - partitions that are too large
+
+Use medians, percentiles, and the task table where available. An average blends the fast majority with the expensive tail.
 -->
 
 ---
@@ -1606,13 +1608,10 @@ zoom: 0.85
 </style>
 
 <!--
-Before the cases, ask the room to recall the route. Point to each card and let them supply the verb: Find. Choose. Localize. Inspect. Correlate. Test.
-
-Each case starts from the left again. In Case 0, data volume grows and a stage spills. In Case 1, one hot key creates a long tail. In Case 2, a tiny dimension triggers an unnecessary shuffle. In Case 3, one writer leaves resources idle.
-
-Keep this ribbon visible during each walkthrough. Move the highlight as we change views. The audience should know why we click a stage, task, SQL node, or executor before the screen changes.
-
-Set up Case 0: return to the 12-minute run that became a 55-minute run. We already know the route. Now we will work the evidence.
+Case 0   More data, same partitions → spill
+Case 1   One hot key → skewed join
+Case 2   Tiny lookup → unnecessary large shuffle
+Case 3   coalesce(1) → one writer.
 -->
 
 ---
@@ -1827,37 +1826,37 @@ Case 0 uses the completed bad run, so every value shown here is available in Spa
 3 · LOCALIZE
 Open Spark History Server → Stages. In Completed Stages, sort by Duration.
 Stage 13 lasts 109.7 seconds and has only 8 tasks. Its row shows 7.93 GB shuffle read and 7.33 GB disk spill. Stage 11 lasts 72.9 seconds and writes the same 7.93 GB shuffle. Together these stages consume 182.6 seconds of the 217.2-second application runtime.
-Open Stage 13 because it is the longest stage and the spill appears there. Stage IDs can change between runs, so identify it by duration, task count, and shuffle metrics rather than memorizing 13.
+
+Open Stage 13 because it is the longest stage and the spill appears there.
 
 [click]
 4 · INSPECT
 On the Stage 13 detail page, use Summary Metrics for Completed Tasks and the Tasks table. Sort by Duration, Shuffle Read Size, and Disk Spill.
 
-A reducer is not a separate Spark process here. It is a task on the read side of the Exchange. The upstream tasks divide their output into eight shuffle partitions; Stage 13 starts one reducer task for each partition. Each reducer fetches all records assigned to its partition and runs the final deduplication and aggregation for those records.
+The upstream tasks divide their output into eight shuffle partitions; Stage 13 starts one reducer task for each partition. Each reducer fetches all records assigned to its partition and runs the final deduplication and aggregation for those records.
 
-The eight reducers last 92.0 to 109.6 seconds. Each reads 0.84 to 1.11 GB of shuffle data and spills 0.78 to 1.02 GB to disk. The narrow ranges matter: one task does not hold the stage open. All eight tasks are overloaded.
+This deduplication has many distinct keys, so the reducer must retain a large amount of aggregation state instead of processing each row and forgetting it. Eight reducers also run concurrently and share the executor's execution-memory pool.
 
-One GB of shuffle input is not automatically bad. It is the serialized shuffle size, not the task's full in-memory footprint. Spark decodes those rows, stores keys and aggregation buffers in a hash table, and pays object and bookkeeping overhead. This deduplication has many distinct keys, so the reducer must retain a large amount of aggregation state instead of processing each row and forgetting it. Eight reducers also run concurrently and share the executor's execution-memory pool.
+ During an aggregation, sort, or join, Spark keeps intermediate state in the executor’s execution memory. If that state no longer fits, Spark writes part of it to temporary files on the executor’s local disk. That is disk spill. 
+ That extra serialization, disk I/O, and merging makes the stage slower. This is separate from the normal shuffle files produced at the Exchange: the Disk Spill metric records extra temporary I/O caused by memory pressure.
 
-When a reducer cannot grow its aggregation state within its share of execution memory, Spark spills part of that state to temporary local files to free memory and continue. It later reads and merges those files to finish the aggregate. That extra serialization, disk I/O, and merging makes the stage slower. This is separate from the normal shuffle files produced at the Exchange: the Disk Spill metric records extra temporary I/O caused by memory pressure.
-
-The stage summary reports 44.44 GB memory spill and 7.33 GB disk spill. Memory spill estimates the in-memory size of the data Spark evicted, which is why it can exceed the 7.93 GB serialized shuffle input. Disk spill measures the bytes written to temporary files and confirms that the aggregation crossed its memory threshold.
+ A small amount can be normal. A large amount usually indicates that tasks are processing too much data or have too little execution memory.
 
 [click]
 5 · CORRELATE
 Open Spark History Server → SQL and select the write execution. In the final physical plan, follow the scan through HashAggregate to Exchange. The Exchange details show hashpartitioning on pickup and drop-off location with 8 partitions. The shuffle stage carries 259.3 million rows and an estimated 25.1 GiB.
-Return to Stage 13 to connect that Exchange to 8 reducer tasks, 44.44 GB memory spill, and 7.33 GB disk spill. Fetch wait is about zero, so network waiting does not explain the stage duration.
-In Executors, executor 1 has 8 cores. All eight reducer tasks can run at once. Increasing the partition count will create smaller tasks that run in waves; it does not require more cores to reduce each task's aggregation state.
+Return to Stage 13 to connect that Exchange to 8 reducer tasks, 44.44 GB memory spill, and 7.33 GB disk spill
+In Executors, executor 1 has 8 cores. All eight reducer tasks can run at once. 
 
 [click]
 6 · TEST
-State the hypothesis: the historical input grew, but the shuffle stayed at eight partitions. Each reducer now owns too much aggregation state and spills to disk.
+State the hypothesis: the historical input grew, but the shuffle stayed at eight partitions. Each reducer now owns too much aggregation state and spills to disk. Increasing the partition count will create smaller tasks that run in waves; it does not require more cores to reduce each task's aggregation state.
 
 Why do more partitions help when the executor count stays the same? Executors determine how many tasks run at once; partitions determine how much data and aggregation state each task owns. With one 8-core executor and 8 partitions, all eight large tasks run together, and each competes for execution memory while holding about one eighth of the shuffle. With 256 partitions, the executor still runs only eight tasks at once, but each task owns roughly one thirty-second as much data. Spark processes the 256 smaller tasks in about 32 waves. Completed tasks release their memory before the next wave starts.
 
 The change does not add CPU or reduce the total input. It trades extra task-scheduling overhead for a much smaller peak memory requirement per task. Avoiding repeated spill and merge I/O can save more time than those extra tasks cost. More is not always better: partitions that are too small add scheduling and file overhead. At least 256 is the hypothesis for this run, not a universal Spark setting.
 
-Run the fixed application with the same full-history input and business logic, changing only spark.sql.shuffle.partitions from 8 to at least 256. Compare the dominant stage's duration, disk spill, shuffle read per task, and task distribution in History Server. A shorter stage with much less disk spill supports the hypothesis. If those metrics stay flat, reject it and return to the task evidence.
+Run the fixed application with the same full-history input and business logic, changing only spark.sql.shuffle.partitions from 8 to at least 256.
 -->
 
 ---
@@ -1937,7 +1936,7 @@ zoom: 0.85
     </div>
     <div class="case1-verdict rose">
       <span>THE LONG TAIL</span>
-      <b>1,226×</b>
+      <b>1.226×</b>
       <small>max duration ÷ median</small>
       <p>Partition 75 receives 88.7% of all join rows. Only 8 of 256 tasks read any shuffle data.</p>
     </div>
@@ -2076,18 +2075,17 @@ zoom: 0.85
 </style>
 
 <!--
-Case 1 uses the completed bad run in case1_logs_bad. The values on this slide come from its Spark event records: application_1789645022336_0001, SQL execution 1, and its final join stage. Stage and task IDs can change on a rerun, so use the descriptions and metrics below rather than memorizing the numbers.
-
 3 · LOCALIZE
-Open the completed application in Spark History Server. In SQL, select the execution named “CASE 1 BAD: standard-rate hot join key.” The event log records a 186.1-second write execution and a final physical plan ending in WriteFiles.
+The event log records a 186.1-second write execution and a final physical plan ending in WriteFiles.
 Open Stages and sort Completed Stages by Duration. Stage 8 is the parquet join-and-write stage: 256 tasks, 142.3 seconds, and 3.63 GiB of shuffle read. It consumes about 76% of the SQL execution. Stage 4 scans 119,136,044 fact rows and writes the same 3.63 GiB shuffle in 41.8 seconds, so the scan completes; the final stage explains the long tail.
-Identify the stage by its 256 tasks, shuffle read, and parquet call site rather than by ID. Stage numbers may differ in another application.
 
 [click]
 4 · INSPECT
+
+**Only eight of the 256 tasks have nonzero shuffle read because the join key has only eight rule values. That alone is not the diagnosis. The decisive clue is that one partition owns 88.7% of all shuffle records; the next largest partitions read only 6.77 million and 4.38 million rows.**
+
 Open Stage 8. First look at the event timeline: Task 89, for partition 75, starts with the first wave and extends almost to the end of the stage while the other task bars disappear.
 In Summary Metrics for Completed Tasks, compare maximum, mean, and median duration. Then use the Tasks table and sort by Duration and Shuffle Read Size. Partition 75 lasts 142.23 seconds, reads 3.24 GiB and 105,720,908 records, and writes 105,720,907 output rows. The median task lasts 0.116 seconds, making the maximum 1,226 times the median.
-Only eight of the 256 tasks have nonzero shuffle read because the join key has only eight rule values. That alone is not the diagnosis. The decisive clue is that one partition owns 88.7% of all shuffle records; the next largest partitions read only 6.77 million and 4.38 million rows.
 
 [click]
 5 · CORRELATE
@@ -2101,12 +2099,11 @@ State one hypothesis: the STANDARD fare rule is shared by most Yellow Taxi rows.
 
 Explain the solution in plain language: a **salt** is an extra deterministic bucket number added to the join key. Give each trip a salt from 0 to 8,191, then copy the eight-row rule table once for every salt and join on `(fare_rule, salt)`. The STANDARD trips are now spread across many `(STANDARD, salt)` partitions instead of one hot `STANDARD` partition. This is not password encryption; it is a partitioning trick to break up a hot key.
 
-Analogy for the room: one supermarket checkout lane gets 95% of shoppers while seven other lanes sit empty. Salting relabels those shoppers into 8,192 sub-groups so they queue across many lanes even though they're buying the same thing. After the join, the salt column is dropped — same rows, same schema, just spread across many tasks instead of piled on one.
+8192 = 256 (shuffle partitions) × 32  8192 is explicitly specified and the exact value is somewhat arbitrary. It is just a tuning parameter
 
 Be upfront that broadcasting the eight-row rule table would work even better here, and would remove the skew problem entirely rather than just spreading it out: with a broadcast join there is no shuffle on the fact side at all, so no single reducer can ever become a hot spot.
 
-Run case1_data_skew/fixed.py as a separate application. It adds one of 8,192 deterministic salts to each trip, replicates the eight-row rule dimension across those salts, and joins on fare_rule plus salt. The shuffle still has 256 partitions and the output columns and business rows stay the same. Broadcast remains disabled so this tests skew rather than changing the join into the Case 2 broadcast example.
-No fixed-run event log is included here, so do not claim a measured speedup yet. In the fixed application's History Server, compare the equivalent join stage's duration, maximum-to-mean data read, maximum task duration, and output row count. The output should remain 119,136,044 rows. A flatter distribution and shorter join stage support the hypothesis; unchanged skew rejects it.
+It adds one of 8,192 deterministic salts to each trip, replicates the eight-row rule dimension across those salts, and joins on fare_rule plus salt.
 -->
 
 ---
@@ -2149,6 +2146,10 @@ No fixed-run event log is included here, so do not claim a measured speedup yet.
 There is a PU/DO location id in the taxi data.
 
 pickup/drop-off route pairs built using cross join
+
+ The tiny route lookup is joined using a sort-merge join, so Spark unnecessarily shuffles and sorts all 259 million trips.
+
+ It should use a broadcast hash join instead.
 -->
 
 ---
@@ -2328,33 +2329,45 @@ zoom: 0.85
 </style>
 
 <!--
-Case 2 uses `case2_logs_bad`. SQL execution 6, “CASE 2 BAD: route enrichment join,” reads the 2019–2024 trip history, joins on PULocationID and DOLocationID, writes `case2/bad`, and has the expected SortMergeJoin. Stage IDs can change on a rerun, so identify work by task count, call site, and shuffle metrics.
+reads the 2019–2024 trip history, joins on PULocationID and DOLocationID, writes to parquet, and has the expected SortMergeJoin.
 
 3 · LOCALIZE
 Open SQL execution 6. It lasts 102.047 seconds. The full application lasts 140.128 seconds; setup, Delta metadata, and commit work account for the remainder.
+
+the bad join path is the combination of Stages 20 and 24:
+
+ - Stage 20 — 50.742s: shuffles the 259M trip rows by pickup/drop-off IDs, writing 5.31 GiB.
+ - Stage 24 — 46.739s: reads that shuffle, sorts/joins it with the route data, and partially aggregates.
+
+stage 21 = wrong for this application.. Do not add Stage 21's 47.546-second wall time to that path. It builds the 70,225 route rows, but its one task is launched 46.930 seconds after submission and runs for only 546 ms. It was submitted alongside the fact stage on the same eight-core executor and spent almost all of its displayed duration waiting for a slot.
+
 Stage 20 scans 259,287,888 trip rows in 53 tasks, lasts 50.742 seconds, and writes 5.31 GiB of serialized shuffle data. Stage 24 follows it: 256 tasks sort-merge the two inputs, partially aggregate the borough pairs, read 5.31 GiB from the fact exchange plus 1.33 MiB from the route exchange, and last 46.739 seconds. Stage 28 reads the 0.96 MiB partial aggregate, writes 64 output rows, and lasts 3.918 seconds.
-Do not add Stage 21's 47.546-second wall time to that path. It builds the 70,225 route rows, but its one task is launched 46.930 seconds after submission and runs for only 546 ms. It was submitted alongside the fact stage on the same eight-core executor and spent almost all of its displayed duration waiting for a slot. The route computation is small; moving the fact table is the cost.
+ The route computation is small; moving the fact table is the cost.
 
 [click]
 4 · INSPECT
-Open Stage 24 and use Summary Metrics for Completed Tasks. Its 256 task wall durations range from 0.242 to 4.172 seconds, with a 1.338-second median and 1.445-second mean. The maximum is 3.1 times the median, far below Case 1's 1,226-times straggler. All 256 tasks read shuffle data.
+Open Stage 24 and use Summary Metrics for Completed Tasks. Its 256 task wall durations range from 0.242 to 4.172 seconds, with a 1.338-second median and 1.445-second mean. **The maximum is 3.1 times the median**, far below Case 1's 1.226-times straggler. All 256 tasks read shuffle data.he task timeline shows broad work rather than one task holding the stage open
+
 Shuffle read ranges from 3.24 MiB to 72.45 MiB, with a 19.93 MiB median. Records read range from 142,011 to 3,301,492, with a median of 927,943. The distribution is not perfectly flat, but the task timeline shows broad work rather than one task holding the stage open.
 The stage reports zero disk spill and four milliseconds of total shuffle fetch wait. With one eight-core executor, Spark runs the 256 reducers in roughly 32 waves. Their 1.427-second mean executor runtime predicts about 45.7 seconds of work across eight slots, which matches the 46.739-second stage. The cost is spread across the reducers.
 
 [click]
 5 · CORRELATE
 Open the final physical plan for SQL execution 6. Both inputs feed a SortMergeJoin Inner. The fact branch contains Exchange hashpartitioning(PULocationID, DOLocationID, 256) followed by Sort. Its ShuffleQueryStage reports 259.29 million rows and 17.4 GiB of plan data; Stage 20 writes 5.31 GiB of serialized shuffle bytes for the same 259,287,888 records.
+
 The route branch scans the 265-zone table twice, builds the 70,225-row Cartesian product, then passes through Exchange and Sort. Its ShuffleQueryStage reports 70.2 thousand rows and 4.1 MiB of plan data; Stage 21 writes 1.33 MiB of serialized shuffle. Plan data size and shuffle bytes are different Spark UI metrics.
-Stage 24 reads 259,358,113 shuffle records, emits 7,254 partial aggregates, and writes a 0.96 MiB final-aggregate shuffle. Stage 28 reduces that to 64 borough-pair rows. The final groupBy needs this small exchange. The excessive shuffle is the earlier 5.31 GiB fact exchange required only by the merge join.
 
 [click]
 6 · TEST
 State one hypothesis: Spark was forced to use a sort-merge join for a 70,225-row route dimension. That choice repartitions and sorts all 259,287,888 fact rows before the join.
-Run `case2_excessive_shuffle/fixed.py` as a separate application. It changes only the join hint by calling `broadcast(routes)`. The expected physical plan contains BroadcastHashJoin and no Exchange on the trip branch before the join. The small final Exchange for groupBy(pickup_borough, dropoff_borough) remains because broadcasting does not remove the aggregation shuffle.
+
+The expected physical plan contains BroadcastHashJoin and no Exchange on the trip branch before the join. The small final Exchange for groupBy(pickup_borough, dropoff_borough) remains because broadcasting does not remove the aggregation shuffle.
+
 Compare the join strategy, fact-side shuffle bytes, join-stage duration, joined row count, and the 64 final output rows. Removing the 5.31 GiB fact exchange while preserving the row counts supports the hypothesis. If the final plan still contains a fact-side Exchange before the join, the broadcast test did not take effect.
 -->
 
 ---
+
 # Case 2: recorded walkthrough
 
 <video controls class="case-video" src="./videos/case2_recording.mp4"></video>
@@ -2583,17 +2596,18 @@ zoom: 0.85
 </style>
 
 <!--
-Case 3 uses the completed bad run in case_3_logs: application_1786348221889_0001. The values on this slide come from SQL execution 1, Stage 4, Task 52, the executor-added event, and the SQL output accumulators. Stage and task IDs can change, so identify the work by the CASE 3 BAD description, the CSV call site, and the one-task shape.
-
 3 · LOCALIZE
-Open Spark History Server → SQL and select execution 1 named “CASE 3 BAD: gzip CSV export.” It lasts 539.045 seconds. The complete application lasts 572.605 seconds; the remaining time includes startup and short Delta metadata work.
+It lasts 539.045 seconds. The complete application lasts 572.605 seconds; the remaining time includes startup and short Delta metadata work.
+
 Open Stages and sort by Duration. Stage 4, named for the CSV call site, lasts 538.062 seconds and contains one task. It accounts for 99.8% of the main SQL execution. The longest metadata stage lasts 5.402 seconds. Open Stage 4 because the single output stage explains the runtime without adding durations from stages that ran for metadata.
 
 [click]
 4 · INSPECT
+The executor-added event records one executor with eight cores, and the resource profile assigns one CPU to each task. Stage 4 can therefore occupy only one of eight task slots. The event log proves poor Spark task parallelism; it does not contain a persisted Fabric Executor Usage advice event, so do not quote a Diagnosis percentage for this run.
+
 Open Stage 4. Its event timeline contains one bar: Task 52 for partition 0 runs for 537.949 seconds. The task reads 79,479,946 records and 1,556,145,733 bytes, then writes the same 79,479,946 records and 1,271,759,612 gzip-compressed bytes. The SQL output metrics confirm one written file.
 The task spends 537.760 seconds in executor run time and 508.366 seconds on executor CPU. JVM garbage collection takes 0.944 seconds. Memory spill, disk spill, shuffle read, and shuffle write are all zero. This is not a skewed distribution because there is no distribution: one task owns the whole write.
-The executor-added event records one executor with eight cores, and the resource profile assigns one CPU to each task. Stage 4 can therefore occupy only one of eight task slots. The event log proves poor Spark task parallelism; it does not contain a persisted Fabric Executor Usage advice event, so do not quote a Diagnosis percentage for this run.
+
 
 [click]
 5 · CORRELATE
@@ -2604,9 +2618,8 @@ Correlate the plan with the executor and output events. Executor 1 has eight cor
 [click]
 6 · TEST
 State one hypothesis: coalesce(1) enforces a one-partition, one-file contract, so Spark cannot spread CSV formatting and gzip compression across the eight available task slots.
-Run case3_poor_parallelism/fixed.py as a separate application. It replaces coalesce(1) with repartition(OUTPUT_PARTITIONS), where OUTPUT_PARTITIONS is at least 64. The rows, columns, CSV format, and gzip compression stay the same. The contract changes from one file to a folder of gzip part files. A strict single gzip stream preserves the serial bottleneck.
-Repartitioning may add an Exchange and shuffle; that is the cost of creating parallel output partitions. Compare the write-stage duration, task count, executor timeline, output row count, and part-file count. The output should still contain 79,479,946 rows. At least 64 write tasks using more than one slot and a shorter write stage support the hypothesis.
-No fixed-run event log is included, so do not claim a measured speedup. If the fixed stage still has one task, inspect the final plan for a later coalesce or another single-partition requirement.
+It replaces coalesce(1) with repartition(OUTPUT_PARTITIONS), where OUTPUT_PARTITIONS is at least 64. The rows, columns, CSV format, and gzip compression stay the same. The contract changes from one file to a folder of gzip part files. 
+Repartitioning may add an Exchange and shuffle; that is the cost of creating parallel output partitions.
 -->
 ---
 
