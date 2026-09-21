@@ -1,0 +1,34 @@
+name: Release presentation PDF
+
+on:
+  push:
+    tags: ["slides-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: slidev/package-lock.json
+      - run: npm ci
+        working-directory: slidev
+      - run: npm run export -- --output the-spark-detective.pdf
+        working-directory: slidev
+      - run: test -s slidev/the-spark-detective.pdf
+      - name: Create release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "$GITHUB_REF_NAME"
+          slidev/the-spark-detective.pdf
+          --title "The Spark Detective $GITHUB_REF_NAME"
+          --generate-notes
