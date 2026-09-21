@@ -6,4 +6,5 @@ dist/
 *.html
 __pycache__/
 *logs*
-
+.agents
+AGENTS.md
