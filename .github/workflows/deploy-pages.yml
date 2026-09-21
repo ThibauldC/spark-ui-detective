@@ -3,6 +3,8 @@ name: Deploy slides to GitHub Pages
 on:
   push:
     branches: [main]
+    paths:
+      - slidev/**
   workflow_dispatch:
 
 permissions:
