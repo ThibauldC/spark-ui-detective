@@ -5,7 +5,7 @@ A Microsoft Fabric talk and demo repo for diagnosing slow Apache Spark jobs with
 The repository contains:
 
 - a [Slidev](https://sli.dev/) presentation in [`slidev/`](slidev/);
-- four Fabric Spark performance investigations in [`case0_data_growth_regression/`](case0_data_growth_regression/), [`case1_data_skew/`](case1_data_skew/), [`case2_excessive_shuffle/`](case2_excessive_shuffle/), and [`case3_poor_parallelism/`](case3_poor_parallelism/);
+- four Fabric Spark performance investigations in [`case0_data_growth_regression/`](case0_data_growth_regression/), [`case1_data_skew/`](case1_data_skew/), [`case2_executor_memory/`](case2_executor_memory/), and [`case3_poor_parallelism/`](case3_poor_parallelism/);
 - the NYC TLC Yellow Taxi ingestion script in [`ingest_nyc_taxi.py`](ingest_nyc_taxi.py).
 
 ## Prerequisites
@@ -75,10 +75,12 @@ For every run, attach the same default Lakehouse and submit the script as a sepa
 | --- | --- | --- | --- |
 | Data growth and spill | [`case0.../bad.py`](case0_data_growth_regression/bad.py) | [`case0.../fixed.py`](case0_data_growth_regression/fixed.py) | Too few shuffle partitions for the full history |
 | Data skew | [`case1.../bad.py`](case1_data_skew/bad.py) | [`case1.../fixed.py`](case1_data_skew/fixed.py) | One hot join key creates a straggler task |
-| Excessive shuffle | [`case2.../bad.py`](case2_excessive_shuffle/bad.py) | [`case2.../fixed.py`](case2_excessive_shuffle/fixed.py) | A small route dimension is shuffled instead of broadcast |
+| Executor memory exhaustion | [`case2.../bad.py`](case2_executor_memory/bad.py) | [`case2.../fixed.py`](case2_executor_memory/fixed.py) | Partition-sized Python lists exhaust worker/container memory; streaming fixes it |
 | Poor parallelism | [`case3.../bad.py`](case3_poor_parallelism/bad.py) | [`case3.../fixed.py`](case3_poor_parallelism/fixed.py) | `coalesce(1)` serializes a gzip CSV export |
 
 Case 0 also has [`baseline.py`](case0_data_growth_regression/baseline.py), which processes only October–December 2024 for comparison with the full-history run.
+
+**Case 2 is an intentional memory-failure demo.** Use a non-production Fabric application without important concurrent workloads. Start with the default pool, full history, and eight partitions; follow the calibration and failure-diagnosis instructions in [`CASES.md`](CASES.md). The replacement has not yet been validated on Fabric. Existing Case 2 slides, logs, and video cover the retired broadcast-join scenario and need a new capture.
 
 In the History Server, inspect stages, task metrics, SQL plans, shuffle read/write, spill, executor activity, and the relevant Diagnosis view. The expected evidence and suggested timing targets are documented in [`CASES.md`](CASES.md).
 

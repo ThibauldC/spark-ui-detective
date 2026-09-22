@@ -34,8 +34,8 @@ Each scenario is a standalone script that can be uploaded as its own Fabric Spar
 | `case0_data_growth_regression/fixed.py` | Full history with at least 256 shuffle partitions |
 | `case1_data_skew/bad.py` | Sort-merge join on the standard-rate hot key |
 | `case1_data_skew/fixed.py` | Sort-merge join with a salted key |
-| `case2_excessive_shuffle/bad.py` | Sort-merge join on the route dimension |
-| `case2_excessive_shuffle/fixed.py` | Broadcast hash join on the route dimension |
+| `case2_executor_memory/bad.py` | Buffer entire partitions in executor Python memory (intentional failure) |
+| `case2_executor_memory/fixed.py` | Stream the same partitions with bounded memory |
 | `case3_poor_parallelism/bad.py` | One gzip CSV output task |
 | `case3_poor_parallelism/fixed.py` | Parallel gzip CSV output |
 
@@ -68,7 +68,7 @@ Stages, stage task metrics, spill metrics, and the Executors tab.
 
 A fare extract is enriched with a pricing-rule description using a sort-merge join. Standard-rate trips share one `STANDARD` key, while exceptional fares use their rate code. Since standard fares dominate Yellow Taxi records, one join partition receives most rows.
 
-Broadcasting the tiny rule dimension is deliberately disabled: that would remove this join shuffle entirely and turn the demo into Case 2. Here the comparison isolates skew within a required shuffled join.
+Broadcasting the tiny rule dimension is deliberately disabled: that would remove this join shuffle entirely. Here the comparison isolates skew within a required shuffled join.
 
 ### Evidence
 
@@ -85,26 +85,90 @@ The fixed run adds one of 8,192 deterministic salts to every trip and replicates
 
 The sort-merge join stage, task duration and shuffle read distribution, SQL plan, and Diagnosis > Data Skew.
 
-## Case 2: excessive shuffle
+## Case 2: executor memory exhaustion — the partition-sized Python list
 
 ### Scenario
 
-The pipeline enriches trips with pickup and drop-off boroughs. It builds a 70,225-row route dimension from the public 265-zone lookup. The bad run forces a sort-merge join, reproducing a missed broadcast caused by absent statistics or a disabled threshold.
+A Python data-quality profiler reports row counts and null counts for every column. It scans the real 2019–2024 taxi history, retaining all normalized columns. Eight round-robin partitions give each task roughly 30 million trips, without a hot business key or join.
 
-### Evidence
+The bad implementation first converts **every row in its partition into a Python dictionary and keeps them all in a list**. Only then does it calculate the profile. This pattern can pass a small-data test but exhaust memory on a historical backfill.
 
-- The bad SQL plan shows `SortMergeJoin`.
-- Exchanges appear on both join inputs.
-- The fact-side exchange moves the full trip history.
-- Tasks should remain much more balanced than Case 1.
+```python
+# Bad: materialize an entire partition on the executor.
+records = [row.asDict() for row in rows]
 
-### Fix
+# Fixed: convert and process one row at a time.
+records = (row.asDict() for row in rows)
+```
 
-The fixed run explicitly broadcasts the route dimension. The large-side exchange disappears and the plan uses a broadcast hash join.
+This is executor-side `mapPartitions`, **not driver-side `collect()` or `toPandas()`**. Both versions write the same tiny report to Delta; neither collects the trips on the driver. An explicit output schema avoids running the profiler early for schema inference.
 
-### Where to look
+### Why a default Fabric pool can fail here
 
-SQL plan, DAG exchange boundaries, and stage shuffle read and write.
+The previous `case2_logs_bad` capture used one eight-core executor with `spark.executor.memory=56g` and `spark.executor.memoryOverhead=384m`. These are observed settings from that application, not a promise about every default pool.
+
+A Python dictionary plus its decoded values can occupy around a kilobyte per trip, depending on the Python version and values. Tens of millions of dictionaries can therefore require tens of GB **per task**, with multiple Python workers competing for the executor container's memory. Compressed Parquet size is not the in-memory size.
+
+Spark SQL sorts and aggregations can spill managed state to disk. An ordinary Python list cannot. AQE cannot split this user-code list or make it spill. The demo disables AQE in both runs to keep the partition comparison explicit; it does not lower executor memory, change pools, add fake rows, allocate padding, or manufacture an exception.
+
+### Run and calibrate on Fabric
+
+**This deliberately risks killing executors and failing the application. Use a non-production workspace/capacity without other important work running. Rehearse and record it rather than relying on a live OOM.**
+
+1. Attach the ingested Lakehouse. Keep the default pool and launch `case2_executor_memory/bad.py` as its own Spark application. The script prints the available executor memory/core settings before starting.
+2. Start with all six years and `PARTITIONS = 8`. Capture failed attempts and the executor/container diagnostics. Stop the run once you have useful evidence if it keeps retrying; a successful bad run is not required.
+3. If it completes, confirm it read the full corpus. Reduce `PARTITIONS` to 4, then 2, in **both** scripts and retry in a new application. Fewer partitions increase each list's size. Do not increase retry limits or shrink the pool to manufacture a failure.
+4. Run `fixed.py` in a fresh application with exactly the same years, partition count, pool, and runtime. It should finish with the same report semantics and bounded profiler state.
+
+The threshold and exact failure mode depend on executor placement, runtime, and capacity. These scripts have not yet been validated on Fabric; calibrate before promising a particular exception or failure count. With many large executors, more workers may run separately and the bad run may survive. Record the actual settings and outcome.
+
+For a small successful comparison, temporarily filter both scripts to one source month before `repartition`. Compare their Delta reports, then restore the full-history input for the failure capture. A failed bad run produces no successful new report; an older output at that path is not evidence for the failed run.
+
+### Evidence and where to look
+
+- **Jobs / Stages:** the scan and round-robin exchange precede the Python profiling stage. Look for failed task attempts and retries in that stage. Retries repeat the same unbounded allocation. Completed fixed-run task record counts should be broadly balanced; failed-attempt counters can be partial or missing.
+- **Executors, including dead executors:** lost executors and replacements if the container is killed. A Python-worker-only crash can fail tasks without killing the JVM executor.
+- **Driver and executor stderr / Fabric application logs:** possible messages include `Python worker exited unexpectedly`, `MemoryError`, `ExecutorLostFailure`, or container exit code 137 with a memory-limit diagnostic. A worker crash or exit 137 alone is not proof of OOM; retain the accompanying memory diagnostic. Later fetch failures may be consequences of losing an executor's shuffle files.
+- **Memory metrics:** Python RSS is outside the JVM heap. JVM GC time, Peak Execution Memory, and spill can stay low during the Python allocation. The Executors **Storage Memory** column measures cached blocks, not total process/container memory. Use process/container metrics when available and logs to establish the cause; do not promise a JVM GC spike.
+- **SQL / DAG:** `Exchange RoundRobinPartitioning(8)` (or your calibrated count) explains the input distribution. The Python profiler is an RDD operation and is not fully represented by the final SQL aggregate plan. Use the stage DAG and task failures, not just the SQL tab.
+
+The intended contrast is **Case 0: managed state spills; Case 1: one hot key; Case 2: balanced tasks retain unbounded Python state and fail**.
+
+### Fix and verification
+
+The only processing change is a list comprehension to a generator expression. Input, schema, partition count, shuffle, and pool stay the same. The profiler retains one dictionary at a time and one counter per column, rather than one dictionary per input row. Adding memory or partitions may postpone this bug; streaming removes it. For a production null-count report, native Spark SQL aggregates would usually be simpler and faster; the demo keeps the Python implementation to isolate the memory fix.
+
+Run the small equivalence/streaming check locally (no Spark installation needed):
+
+```bash
+python3 case2_executor_memory/test_profile.py
+```
+
+After the fixed Fabric run, optionally verify its report against native Spark counts in an untimed notebook cell. Only the tiny aggregate results reach the driver:
+
+```python
+from pyspark.sql import functions as F
+
+trips = spark.table("nyc_yellow_trips").where(
+    F.col("pickup_year").isin(2019, 2020, 2021, 2022, 2023, 2024)
+)  # Match the input filters used in your run.
+expected = trips.agg(
+    F.count("*").alias("__rows"),
+    *[F.count(F.col(c)).alias(c) for c in trips.columns],
+).first()
+actual = spark.read.format("delta").load(
+    "Files/nyc_taxi/demo_outputs/case2/fixed"
+).collect()
+assert len(actual) == len(trips.columns)
+assert {r.column_name for r in actual} == set(trips.columns)
+assert all(r.row_count == expected["__rows"] and
+           r.null_count == expected["__rows"] - expected[r.column_name]
+           for r in actual)
+```
+
+See Microsoft's [Fabric memory and executor failure troubleshooting guide](https://learn.microsoft.com/en-us/fabric/data-engineering/troubleshoot-spark-memory-performance). No resource configuration changes are needed here; if you do change executor settings during a separate experiment, use the Fabric Environment or first-cell `%%configure`, not runtime `spark.conf.set()`.
+
+The existing Case 2 event logs, video, and slides still describe the retired broadcast-join demo. They are not evidence for this replacement; recapture them after a Fabric rehearsal.
 
 ## Case 3: poor parallelism
 
@@ -137,7 +201,7 @@ Adjust the year or month constants near the top of each script if the Fabric cap
 |---|---|
 | 0 | Bad run spills several GB and takes at least twice as long as fixed |
 | 1 | Maximum task duration or input exceeds the median by at least 10× |
-| 2 | Fixed plan removes the fact-side exchange and cuts join-stage time by at least 3× |
+| 2 | Bad run has memory-related task failures/worker or executor loss; fixed completes on the same pool, input, and partition count |
 | 3 | One output task becomes 64 or more tasks and write time drops by at least 5× |
 
 Demo outputs are written below `/lakehouse/default/Files/nyc_taxi/demo_outputs` and can be deleted after captures.
