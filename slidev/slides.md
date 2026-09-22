@@ -41,7 +41,7 @@ Who has already worked with the Spark UI?
 Who has already diagnosed a problem using the Spark UI?
 
 This is a practical investigation.
-I don’t want you to learn how to solve every issue in spark. Also in the practical cases I will throw some technical terms around (like sortmergejoin, broadcase join, etx.) the goal of this session is not to remember them, but the goal is to give you a reusable workflow to find possible issues using the Spark UI.
+I don’t want you to learn how to solve every issue in spark. Also in the practical cases I will throw some technical terms around (like sortmergejoin, broadcase join, etc.) the goal of this session is not to remember them, but the goal is to give you a reusable workflow to find possible issues using the Spark UI.
 -->
 
 ---
@@ -803,50 +803,6 @@ How it relates to Graph:<span>The Fabric History Server's <code>Graph</code> tab
 
 ---
 
-# Spark UI vs Spark History Server
-
-<div class="mt-4 comparison-table">
-
-| | Spark UI | Spark History Server
-|---|---|---|
-| Where the data comes from | The running Spark application and its driver | Persisted Spark event logs |
-| When it is most useful | While the application is running | After the application has completed, failed, or been cancelled |
-| Freshness | Live or near-real-time | Reconstructed from logs; running applications may be updated intermittently |
-| Lifetime | Normally disappears when the application and driver stop | Remains available after the application ends, subject to Fabric’s retention of the run |
-| Typical usage | Watch active jobs, stages, tasks and executors | Post-mortem analysis, performance investigation and comparing what happened during an earlier run |
-| Standard open-source Spark endpoint | Usually port `4040` on the driver | Usually port `18080` on a separate History Server |
-</div>
-
-<style>
-.comparison-table table {
-  font-size: 1rem;
-  line-height: 1.2;
-}
-.comparison-table th,
-.comparison-table td {
-  padding: 0.45rem 0.6rem;
-}
-</style>
-
-<!--
-First going to talk about Spark UI vs History server, this exists in open-source version of Spark as well.
-
-When it is most useful: Spark UI -> to see why your notebook/Spark job is running as long as it is, Spark HS -> to see why your daily batch job took this long
-
-https://spark.apache.org/docs/latest/web-ui.html
-
-Every SparkContext launches a Web UI, by default on port 4040, that displays useful information about the application. This includes:
-A list of scheduler stages and tasks
-A summary of RDD sizes and memory usage
-Environmental information.
-Information about the running executors
-
-
-It is still possible to construct the UI of an application through Spark’s history server, provided that the application’s event logs exist.
--->
-
----
-
 # What is available in Fabric?
 
 <div class="mt-8">
@@ -861,34 +817,6 @@ It is still possible to construct the UI of an application through Spark’s his
 
 <!--
 -->
----
-
-# Monitor Hub/Recent runs
-
-<div class="mental-eyebrow text-blue-700">Looking at recent runs of your notebook/Spark job</div>
-
-<img
-  src="./images/recent_runs.png"
-  alt="Recent runs overview"
-  class="recent-runs-screenshot"
-/>
-
-<!--
--->
-
-<style>
-
-.recent-runs-screenshot {
-  display: block;
-  width: 100%;
-  max-height: 22rem;
-  margin-top: 0.5rem;
-  object-fit: contain;
-  border: 1px solid #cbd5e1;
-  border-radius: 1.25rem;
-  box-shadow: 0 0.75rem 1.5rem rgb(15 23 42 / 0.15);
-}
-</style>
 
 ---
 
@@ -928,233 +856,6 @@ Access Spark monitoring details from the Fabric Monitoring Hub or Recent runs pa
 - Data tab: Copy or download input/output file information and view properties.
 - Item snapshots tab: Browse related items and view snapshots of code and parameters at execution time.
 - Diagnostics panel: Receive real-time recommendations and error analysis from Spark Advisor.
--->
-
----
-zoom: 0.85
----
-
-# How to reach the right Spark lens
-
-<div class="fabric-route-map">
-  <div class="route-column route-starts">
-    <div class="route-heading">START FROM</div>
-    <div class="route-source notebook-source"><b>Notebook</b><small>Run → All runs</small></div>
-    <div class="route-source job-source"><b>Spark job definition</b><small>⋯ → Recent runs</small></div>
-    <div class="route-source monitor-source"><b>Monitor hub</b><small>Monitor → select application</small></div>
-  </div>
-
-  <div class="route-column route-arrows" aria-hidden="true">
-    <div class="route-heading"> </div>
-    <div>→</div>
-    <div>→</div>
-    <div>→</div>
-  </div>
-
-  <div class="route-column route-finders">
-    <div class="route-heading">FIND THE RUN</div>
-    <div class="route-step recent-step"><b>Recent runs</b><small>Notebook / job definition</small></div>
-    <div class="route-step recent-step"><b>Recent runs</b><small>Notebook / job definition</small></div>
-    <div class="route-step monitor-step"><b>Application list</b><small>Monitor hub</small></div>
-  </div>
-
-  <div class="route-column route-arrows" aria-hidden="true">
-    <div class="route-heading"> </div>
-    <div>→</div>
-    <div>→</div>
-    <div>→</div>
-  </div>
-
-  <div class="route-column route-details">
-    <div class="route-heading">DRILL INTO</div>
-    <div class="route-detail-card"><b>Spark application detail</b><small>Jobs · resources · logs · snapshots</small></div>
-    <div class="route-detail-card"><b>Spark application detail</b><small>Jobs · resources · logs · snapshots</small></div>
-    <div class="route-detail-card"><b>Spark application detail</b><small>Jobs · resources · logs · snapshots</small></div>
-  </div>
-</div>
-
-<div class="lens-branch">
-  <div class="branch-label">APPLICATION STATE</div>
-  <div class="branch-source">Spark application detail</div>
-  <div class="branch-arrow">→</div>
-  <div class="lens-card live-lens"><span>RUNNING</span><b>Spark UI</b><small>live execution</small></div>
-  <div class="lens-or">or</div>
-  <div class="lens-card ended-lens"><span>ENDED</span><b>Spark History Server</b><small>post-mortem analysis</small></div>
-</div>
-
-<div class="live-notebook-card">
-  <div class="live-notebook-status">LIVE</div>
-  <div>
-    <span>NOTEBOOK APPLICATION RUNNING</span>
-    <b>Cell progress → Spark UI</b>
-    <small>Open the live Spark UI directly from the running notebook cell.</small>
-  </div>
-</div>
-
-<style>
-.fabric-route-map {
-  display: grid;
-  grid-template-columns: 1.15fr 2.1rem 1.3fr 2.1rem 1.65fr;
-  gap: 0.65rem;
-  margin-top: 1rem;
-}
-.route-column {
-  display: grid;
-  grid-template-rows: 1.25rem repeat(3, minmax(3.3rem, auto));
-  gap: 0.45rem;
-}
-.route-heading {
-  color: #64748b;
-  font-size: 0.65rem;
-  font-weight: 900;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-.route-source,
-.route-step,
-.route-detail-card {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  border: 1px solid #cbd5e1;
-  border-radius: 0.7rem;
-  background: #f8fafc;
-  padding: 0.55rem 0.75rem;
-}
-.route-source b,
-.route-step b,
-.route-detail-card b {
-  color: #0f172a;
-  font-size: 0.95rem;
-}
-.route-source small,
-.route-step small,
-.route-detail-card small {
-  margin-top: 0.2rem;
-  color: #64748b;
-  font-size: 0.68rem;
-  line-height: 1.15;
-}
-.notebook-source { border-color: #93c5fd; background: #eff6ff; }
-.job-source { border-color: #c4b5fd; background: #f5f3ff; }
-.monitor-source { border-color: #86efac; background: #f0fdf4; }
-.recent-step { border-color: #93c5fd; background: #eff6ff; }
-.monitor-step { border-color: #86efac; background: #f0fdf4; }
-.route-detail-card { border-color: #fbbf24; background: #fffbeb; }
-.route-arrows {
-  color: #94a3b8;
-  font-size: 1.8rem;
-  font-weight: 800;
-  text-align: center;
-}
-.route-arrows > div:not(.route-heading) {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.lens-branch {
-  display: grid;
-  grid-template-columns: auto 1.35fr auto 1fr auto 1.25fr;
-  align-items: center;
-  gap: 0.55rem;
-  margin-top: 0.8rem;
-  border-top: 1px solid #fbbf24;
-  border-bottom: 1px solid #fbbf24;
-  background: #fffbeb;
-  padding: 0.65rem 0.75rem;
-}
-.branch-label {
-  color: #92400e;
-  font-size: 0.63rem;
-  font-weight: 900;
-  letter-spacing: 0.1em;
-}
-.branch-source {
-  border: 1px solid #fbbf24;
-  border-radius: 0.55rem;
-  background: white;
-  padding: 0.5rem 0.65rem;
-  color: #78350f;
-  font-size: 0.85rem;
-  font-weight: 800;
-  text-align: center;
-}
-.branch-arrow,
-.lens-or {
-  color: #b45309;
-  font-size: 1.35rem;
-  font-weight: 800;
-  text-align: center;
-}
-.lens-or { font-size: 0.72rem; font-weight: 700; }
-.lens-card {
-  display: flex;
-  min-height: 3.25rem;
-  flex-direction: column;
-  justify-content: center;
-  border-radius: 0.55rem;
-  padding: 0.45rem 0.65rem;
-}
-.lens-card span {
-  font-size: 0.6rem;
-  font-weight: 900;
-  letter-spacing: 0.1em;
-}
-.lens-card b { font-size: 0.9rem; }
-.lens-card small { color: #475569; font-size: 0.65rem; }
-.live-lens { border: 1px solid #86efac; background: #f0fdf4; color: #166534; }
-.ended-lens { border: 1px solid #c4b5fd; background: #f5f3ff; color: #5b21b6; }
-.live-notebook-card {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  margin-top: 0.7rem;
-  border: 2px solid #22c55e;
-  border-radius: 0.75rem;
-  background: #f0fdf4;
-  padding: 0.65rem 0.85rem;
-  color: #166534;
-}
-.live-notebook-status {
-  border-radius: 999px;
-  background: #16a34a;
-  padding: 0.3rem 0.5rem;
-  color: white;
-  font-size: 0.58rem;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-}
-.live-notebook-card span {
-  display: block;
-  font-size: 0.6rem;
-  font-weight: 900;
-  letter-spacing: 0.1em;
-}
-.live-notebook-card b {
-  display: block;
-  margin-top: 0.1rem;
-  font-size: 0.9rem;
-}
-.live-notebook-card small {
-  display: block;
-  margin-top: 0.15rem;
-  color: #475569;
-  font-size: 0.65rem;
-}
-</style>
-
-<!--
-Accuracy check against the Microsoft Learn navigation:
-- Recent runs is opened from the notebook or Spark job definition item context. A notebook also exposes Run → All runs.
-- The Monitor hub is a parallel entry point: select an application there; it does not open a Recent runs pane.
-- From application details, the action is Spark UI for a running application and Spark history server for an ended one (Completed, Failed, Canceled, or Stopped).
-- Notebook cell progress also has a direct Spark UI shortcut while the application is running. For Spark job definitions, use Recent runs or Monitor → application details before choosing the state-based lens.
-
-Sources:
-https://learn.microsoft.com/en-us/fabric/data-engineering/spark-monitoring-overview
-https://learn.microsoft.com/en-us/fabric/data-engineering/spark-item-recent-runs
-https://learn.microsoft.com/en-us/fabric/data-engineering/spark-detail-monitoring
-https://learn.microsoft.com/en-us/fabric/data-engineering/apache-spark-history-server
 -->
 
 ---
@@ -1618,8 +1319,6 @@ Case 3   coalesce(1) → one writer.
 
 # Case 0: six years of taxi trips
 
-<div class="text-sm font-bold tracking-widest text-blue-700">READ THE WORKLOAD BEFORE READING THE UI</div>
-
 <div class="grid grid-cols-2 gap-6 mt-6">
   <div class="rounded-2xl border border-blue-200 bg-blue-50 p-6">
     <div class="text-sm font-bold tracking-widest text-blue-700">WHAT THE SCRIPT DOES</div>
@@ -1821,7 +1520,6 @@ zoom: 0.85
 </style>
 
 <!--
-Case 0 uses the completed bad run, so every value shown here is available in Spark History Server. History Server reconstructs these Spark UI views from the application's event log.
 
 3 · LOCALIZE
 Open Spark History Server → Stages. In Completed Stages, sort by Duration.
@@ -1877,8 +1575,6 @@ Run the fixed application with the same full-history input and business logic, c
 ---
 
 # Case 1: enrich trips with fare rules
-
-<div class="text-sm font-bold tracking-widest text-blue-700">READ THE WORKLOAD BEFORE READING THE UI</div>
 
 <div class="grid grid-cols-2 gap-6 mt-6">
   <div class="rounded-2xl border border-blue-200 bg-blue-50 p-6">
@@ -2125,8 +1821,6 @@ It adds one of 8,192 deterministic salts to each trip, replicates the eight-row 
 
 # Case 2: a tiny report, a huge Python list
 
-<div class="text-sm font-bold tracking-widest text-blue-700">READ THE WORKLOAD BEFORE READING THE UI</div>
-
 <div class="grid grid-cols-2 gap-6 mt-6">
   <div class="rounded-2xl border border-blue-200 bg-blue-50 p-6">
     <div class="text-sm font-bold tracking-widest text-blue-700">WHAT THE SCRIPT DOES</div>
@@ -2145,9 +1839,14 @@ It adds one of 8,192 deterministic salts to each trip, replicates the eight-row 
 </div>
 
 <!--
-This replaces the old broadcast-join case. Sources: case2_mem_bad_attempt1, case2_mem_bad_attempt2, case2_mem_fixed, and case2_stderr. Scripts: case2_executor_memory/bad.py and fixed.py. Do not play videos/case2_recording.mp4: it still shows the retired join demo.
-
 The business output is a null-count profile: 21 normalized columns become 21 report rows. The bad mapPartitions function first evaluates [row.asDict() for row in rows], retaining every dictionary. The fixed function uses a generator expression and retains only the current record and column counters. This is executor-side Python, NOT a driver collect() or toPandas(). The 21-row output is observed in the fixed run; the bad captures never reach a completed report.
+
+t means Spark can automatically move some of its own intermediate data from memory to local disk, but it cannot do that for arbitrary Python objects your code creates. Python code creates millions of dictionaries of all rows.
+
+ A Python list is just an in-memory object. Spark does not inspect it and decide which elements to write to disk. The Python worker owns it, outside Spark’s managed aggregation/sort/join memory structures. If
+ memory becomes exhausted, the Python process or executor may be killed.
+
+ Spark-managed operators such as hash aggregation, sorting, and shuffling use spill-aware data structures:
 
 PREPARE THE UI
 Open Fabric Recent runs / Monitor hub → the bad Spark Job Definition run → application details → Spark History Server. Confirm application_1790060503449_0001 and choose application attempt 2. Keep attempt 1 available to show recurrence, but do not mix their task IDs or timelines. Open the fixed application_1790065465428_0001, attempt 1, in another tab. Stage IDs 10, 11, and 12 happen to match across these captures; identify their work, not just their numbers.
@@ -2223,10 +1922,6 @@ Container killed on request. Killed by external signal.</code></pre>
     <div class="hypothesis"><span>HYPOTHESIS</span><b>Unbounded Python state exhausts memory</b><small>Millions of dictionaries per worker; no automatic list spill.</small></div>
     <i>→</i>
     <div class="test"><span>CODE CHANGE</span><b>Stream instead of buffer</b><small>Keep eight partitions and the same input. Retain only a row and column counters.</small></div>
-  </div>
-  <div class="grid grid-cols-2 gap-4 mt-4 text-sm">
-    <div class="rounded-lg bg-rose-50 p-3"><b>BAD · list</b><br /><code>records = [row.asDict() for row in rows]</code></div>
-    <div class="rounded-lg bg-emerald-50 p-3"><b>FIXED · generator</b><br /><code>records = (row.asDict() for row in rows)</code></div>
   </div>
 </div>
 
@@ -2345,35 +2040,9 @@ Failed Stage 11 tasks have no Task Metrics records: blank/zero-looking UI cells 
 Show the two comprehension lines. Square brackets materialize every row; parentheses make a generator. The counters and report schema stay the same. The profiler's retained state changes from proportional to partition size to proportional to the number of columns. More partitions or more memory can postpone the bad allocation; streaming removes the need to retain those records.
 
 Switch to the fixed run on the next slide. It completes, but inspect Environment and task placement before saying only one thing changed: this recorded fixed run used TWO concurrent executors, with four profiling tasks each, versus one executor with eight tasks in the bad run. That lowers memory competition too. Treat completion as supporting evidence, not an isolated proof of the code fix. A controlled follow-up would rerun fixed with the bad run's one-executor allocation, keeping the same input and eight partitions; configure resources before session launch.
--->
 
----
-zoom: 0.85
----
 
-# Case 2: streaming completes the report
-
-<div class="text-sm font-bold tracking-widest text-emerald-700">OBSERVED RESULT · FIXED APPLICATION ATTEMPT 1</div>
-
-<div class="grid grid-cols-3 gap-4 mt-4 text-center">
-  <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4"><div class="text-3xl font-bold text-emerald-800">10m 31.8s</div><div class="mt-1 text-sm">Spark application start → end</div></div>
-  <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4"><div class="text-3xl font-bold text-emerald-800">283 / 283</div><div class="mt-1 text-sm">tasks succeed · zero failed attempts</div></div>
-  <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4"><div class="text-3xl font-bold text-emerald-800">21 rows</div><div class="mt-1 text-sm">written to the Delta profile</div></div>
-</div>
-
-| Fixed-run stage | Wall time | Task-level evidence |
-|---|---:|---|
-| **10 · scan + repartition** | 99.2s | Same **259,287,888 rows** and **13.74 GiB** shuffle |
-| **11 · Python profiling** | **461.5s** | **8/8 succeed**, 32,410,983–32,410,989 records per task |
-| **12 · aggregate + write** | 25.5s | 168 partial profiles → **21 output rows** |
-
-<div class="mt-3 rounded-xl border-2 border-amber-300 bg-amber-50 p-4 text-base text-amber-950">
-  <b>Check the control:</b> bad = 1 executor × 8 profiling tasks; fixed = 2 executors × 4 tasks.<br />
-  Same per-executor memory, input, and partitions — but less memory competition. No clean speedup claim.
-</div>
-
-<!--
-SOURCE AND TIMING
+FIXED:
 case2_mem_fixed records application_1790065465428_0001, attempt 1. SparkListenerApplicationStart at line 6 and ApplicationEnd at line 738 give 631.761 seconds = 10m31.761s (the reported approximately 11 minutes). This excludes any Fabric queue/pool startup before Spark's application-start event. All 283 TaskEnd events are Success, all eight jobs succeed, and all 14 submitted stages complete.
 
 LIVE WALKTHROUGH — FIXED RUN
@@ -2389,14 +2058,12 @@ Open Environment → Spark Properties in BOTH applications. Bad spark.dynamicAll
 Open Executors → removed executors / event timeline. Fixed executor 2 is removed with 'Executor decommission: spark scale down'; executor 1 with 'Executor decommission: Asked to decommission 1'. Executor 3 is subsequently added. These are decommission events, NOT the bad run's exit-137 failures; no fixed task fails. Merely seeing removed executors is not evidence of OOM. Sources: case2_mem_fixed:576, :583, :585.
 
 TAKEAWAY
-The useful contrast is stalled/retried work versus a completed report, not a fabricated speedup ratio. Distinguish observed container kills, Fabric's automated memory diagnosis, the code-level hypothesis, and the resource difference in the test. In production, native Spark SQL null-count aggregates would avoid this Python row-by-row path altogether; streaming here isolates the retention pattern in the code.
+The useful contrast is stalled/retried work versus a completed report, not a fabricated speedup ratio. Distinguish observed container kills, Fabric's automated memory diagnosis, the code-level hypothesis, and the resource difference in the test. In production, native Spark SQL null-count aggregates would avoid this Python row-by-row path altogether; streaming here isolates the retention pattern in the code
 -->
 
 ---
 
 # Case 3: export one gzip CSV
-
-<div class="text-sm font-bold tracking-widest text-blue-700">READ THE WORKLOAD BEFORE READING THE UI</div>
 
 <div class="grid grid-cols-2 gap-6 mt-6">
   <div class="rounded-2xl border border-blue-200 bg-blue-50 p-6">
