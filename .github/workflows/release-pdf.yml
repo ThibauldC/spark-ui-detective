@@ -23,6 +23,11 @@ jobs:
       - run: npm run export -- --output the-spark-detective.pdf
         working-directory: slidev
       - run: test -s slidev/the-spark-detective.pdf
+      - run: npm run build
+        working-directory: slidev
+      - run: zip -r ../the-spark-detective-web.zip .
+        working-directory: slidev/dist
+      - run: test -s slidev/the-spark-detective-web.zip
       - name: Create release
         if: startsWith(github.ref, 'refs/tags/')
         env:
@@ -30,5 +35,6 @@ jobs:
         run: >-
           gh release create "$GITHUB_REF_NAME"
           slidev/the-spark-detective.pdf
+          slidev/the-spark-detective-web.zip
           --title "The Spark Detective $GITHUB_REF_NAME"
           --generate-notes
