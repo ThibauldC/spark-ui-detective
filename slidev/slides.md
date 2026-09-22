@@ -1587,7 +1587,7 @@ zoom: 0.85
 <div class="mt-8 grid grid-cols-3 gap-5 text-center">
   <div class="case-card"><b>Case 0</b><span>Data grew and spilled</span></div>
   <div class="case-card"><b>Case 1</b><span>One hot key hid the skew</span></div>
-  <div class="case-card"><b>Cases 2–3</b><span>Too much moving, too few hands</span></div>
+  <div class="case-card"><b>Cases 2–3</b><span>Workers die, or only one works</span></div>
 </div>
 
 <div class="mt-10 text-center text-3xl font-bold">Follow the clues.</div>
@@ -1610,7 +1610,7 @@ zoom: 0.85
 <!--
 Case 0   More data, same partitions → spill
 Case 1   One hot key → skewed join
-Case 2   Tiny lookup → unnecessary large shuffle
+Case 2   Partition-sized Python lists → executor loss and retries
 Case 3   coalesce(1) → one writer.
 -->
 
@@ -1638,7 +1638,7 @@ Case 3   coalesce(1) → one writer.
 </div>
 
 <!--
-Case 0 uses the official NYC TLC Yellow Taxi dataset: 72 monthly Parquet files from 2019–2024, normalized into about 250 million trips in `nyc_yellow_trips`. The setup also creates the separate 265-row `nyc_taxi_zones` lookup used by Case 2. The baseline reads October–December 2024; the bad and fixed runs read the full history. Exact counts vary when TLC republishes files.
+Case 0 uses the official NYC TLC Yellow Taxi dataset: 72 monthly Parquet files from 2019–2024, normalized into about 250 million trips in `nyc_yellow_trips`. The baseline reads October–December 2024; the bad and fixed runs read the full history. Exact counts vary when TLC republishes files.
 -->
 
 ---
@@ -2123,33 +2123,38 @@ It adds one of 8,192 deterministic salts to each trip, replicates the eight-row 
 
 ---
 
-# Case 2: add boroughs to every route
+# Case 2: a tiny report, a huge Python list
+
+<div class="text-sm font-bold tracking-widest text-blue-700">READ THE WORKLOAD BEFORE READING THE UI</div>
 
 <div class="grid grid-cols-2 gap-6 mt-6">
   <div class="rounded-2xl border border-blue-200 bg-blue-50 p-6">
     <div class="text-sm font-bold tracking-widest text-blue-700">WHAT THE SCRIPT DOES</div>
     <ol class="mt-4 space-y-3 text-lg text-slate-700">
-      <li><b>1.</b> Read the 2019–2024 trip history.</li>
-      <li><b>2.</b> Build pickup/drop-off route pairs from the 265-zone lookup.</li>
-      <li><b>3.</b> Add borough names to every trip.</li>
-      <li><b>4.</b> Aggregate fares, tips, and trips by borough pair.</li>
+      <li><b>1.</b> Read 259.29 million trips from 2019–2024.</li>
+      <li><b>2.</b> Spread them across eight round-robin partitions.</li>
+      <li><b>3.</b> Profile every column in Python on the executors.</li>
+      <li><b>4.</b> Write 21 rows: row count and null count per column.</li>
     </ol>
   </div>
   <div class="rounded-2xl border-2 border-amber-300 bg-amber-50 p-6">
     <div class="text-sm font-bold tracking-widest text-amber-700">WHY IT MIGHT FAIL</div>
-    <div class="mt-3 text-2xl font-bold text-slate-900">A small lookup can make a large table move.</div>
-    <p class="mt-4 text-lg text-slate-700">The route dimension has 70,225 rows, but the demo disables broadcast and forces a sort-merge join. Spark may repartition and sort all 259 million trips to meet the join.</p>
+    <div class="mt-3 text-2xl font-bold text-slate-900">Each worker keeps its entire partition before counting anything.</div>
+    <p class="mt-4 text-lg text-slate-700">About 32.4 million Python dictionaries per task. An ordinary Python list cannot spill to disk like Spark's managed operators.</p>
   </div>
 </div>
 
 <!--
-There is a PU/DO location id in the taxi data.
+This replaces the old broadcast-join case. Sources: case2_mem_bad_attempt1, case2_mem_bad_attempt2, case2_mem_fixed, and case2_stderr. Scripts: case2_executor_memory/bad.py and fixed.py. Do not play videos/case2_recording.mp4: it still shows the retired join demo.
 
-pickup/drop-off route pairs built using cross join
+The business output is a null-count profile: 21 normalized columns become 21 report rows. The bad mapPartitions function first evaluates [row.asDict() for row in rows], retaining every dictionary. The fixed function uses a generator expression and retains only the current record and column counters. This is executor-side Python, NOT a driver collect() or toPandas(). The 21-row output is observed in the fixed run; the bad captures never reach a completed report.
 
- The tiny route lookup is joined using a sort-merge join, so Spark unnecessarily shuffles and sorts all 259 million trips.
+PREPARE THE UI
+Open Fabric Recent runs / Monitor hub → the bad Spark Job Definition run → application details → Spark History Server. Confirm application_1790060503449_0001 and choose application attempt 2. Keep attempt 1 available to show recurrence, but do not mix their task IDs or timelines. Open the fixed application_1790065465428_0001, attempt 1, in another tab. Stage IDs 10, 11, and 12 happen to match across these captures; identify their work, not just their numbers.
 
- It should use a broadcast hash join instead.
+Start with Jobs → job 5, labelled CASE 2 BAD: unbounded Python partition profiling. Its DAG connects the completed scan/shuffle Stage 10 to Python profiling Stage 11 and the final aggregate/write Stage 12. The stage call site says save; expand the Stage 11 DAG to find PythonRDD and ShuffledRowRDD. SQL alone does not expose the body of the Python function.
+
+The rehearsal reported the bad workload still running after roughly an hour; that is not a completed runtime. The supplied bad event logs have no ApplicationEnd or final job outcome. If the run was subsequently cancelled, label it cancelled, not completed. Do not present the hour as an event-log-measured duration or compute a speedup against it.
 -->
 
 ---
@@ -2157,74 +2162,71 @@ clicks: 3
 zoom: 0.85
 ---
 
-# Case 2: the unnecessary join shuffle
+# Case 2: the executor keeps disappearing
 
 <DetectiveFieldGuide :active="$clicks + 3" compact />
 
 <div v-if="$clicks === 0" class="mt-3">
-  <div class="text-sm font-bold tracking-widest text-violet-700">3 · LOCALIZE THE COST</div>
+  <div class="text-sm font-bold tracking-widest text-violet-700">3 · LOCALIZE THE COST · BAD APPLICATION ATTEMPT 2</div>
   <div class="grid grid-cols-[1.7fr_0.8fr] gap-6 mt-2">
     <div class="case2-stage-list">
-      <div class="case2-stage-row header"><span>Evidence</span><span>Wall time</span><span>Tasks</span><span>Shuffle</span></div>
-      <div class="case2-stage-row"><span>Main route-summary SQL execution</span><span><b>102.0s</b></span><span>—</span><span>—</span></div>
-      <div class="case2-stage-row scan"><span><b>Stage 20</b> · fact scan + join exchange</span><span><b>50.7s</b></span><span>53</span><span><b>5.31 GiB write</b></span></div>
-      <div class="case2-stage-row"><span><b>Stage 21</b> · route exchange <small>(waits 46.9s)</small></span><span>47.5s</span><span>1</span><span>1.33 MiB write</span></div>
-      <div class="case2-stage-row suspect"><span><b>Stage 24</b> · sort-merge join + partial aggregate</span><span><b>46.8s</b></span><span>256</span><span><b>5.31 GiB read</b></span></div>
-      <div class="case2-stage-row"><span><b>Stage 28</b> · final aggregate + Delta write</span><span>3.9s</span><span>256</span><span>0.96 MiB read</span></div>
+      <div class="case2-stage-row header"><span>Stage / work</span><span>Duration</span><span>Tasks</span><span>Evidence</span></div>
+      <div class="case2-stage-row scan"><span><b>10</b> · scan + repartition</span><span>187.4s</span><span>53</span><span>13.74 GiB write</span></div>
+      <div class="case2-stage-row suspect"><span><b>11</b> · Python profiling</span><span>unfinished</span><span>8</span><span><b>16 failed attempts</b></span></div>
+      <div class="case2-stage-row"><span><b>12</b> · aggregate + write</span><span>not started</span><span>8 planned</span><span>No report yet</span></div>
     </div>
     <div class="case2-verdict violet">
-      <span>JOIN PATH</span>
-      <b>97.5s</b>
-      <small>96% of the 102.0s SQL execution</small>
-      <p>The 47.5s route stage is scheduler wait; the fact exchange and shuffled join are the cost.</p>
+      <span>PROFILING PROGRESS</span>
+      <b>0 of 8</b>
+      <small>partitions completed in this capture</small>
+      <p>The scan succeeds. The Python stage loses its workers instead of finishing.</p>
     </div>
   </div>
 </div>
 
 <div v-else-if="$clicks === 1" class="mt-3">
-  <div class="text-sm font-bold tracking-widest text-rose-700">4 · INSPECT THE TASK SHAPE</div>
+  <div class="text-sm font-bold tracking-widest text-rose-700">4 · INSPECT THE TASK SHAPE · BAD APPLICATION ATTEMPT 2</div>
   <div class="grid grid-cols-[1.6fr_0.75fr] gap-6 mt-2">
     <div class="case2-task-chart">
-      <div class="case2-task-head"><span>Stage 24</span><span>Minimum</span><span>Median</span><span>Maximum</span></div>
-      <div class="case2-task-row"><b>Duration</b><span>0.242s</span><span><b>1.338s</b></span><span>4.172s</span></div>
-      <div class="case2-task-row"><b>Shuffle read</b><span>3.24 MiB</span><span><b>19.93 MiB</b></span><span>72.45 MiB</span></div>
-      <div class="case2-task-row"><b>Records read</b><span>142,011</span><span><b>927,943</b></span><span>3,301,492</span></div>
-      <div class="case2-task-row healthy"><b>Pressure checks</b><span>0 B spill</span><span>4 ms total fetch wait</span><span>256 tasks</span></div>
+      <div class="case2-task-head"><span>Stage 11</span><span>Task attempt</span><span>Time running</span><span>Outcome</span></div>
+      <div class="case2-task-row"><b>Executor 1</b><span>0 · all 8 tasks</span><span>189.8s</span><span>Exit 137</span></div>
+      <div class="case2-task-row"><b>Executor 2</b><span>1 · all 8 tasks</span><span>350.8s</span><span>Exit 137</span></div>
+      <div class="case2-task-row"><b>Retry again</b><span>2 · all 8 tasks</span><span>08:15:51 UTC</span><span>Driver log</span></div>
     </div>
     <div class="case2-verdict rose">
-      <span>THE SHAPE</span>
-      <b>3.1×</b>
-      <small>max duration ÷ median</small>
-      <p>This is broad work across 256 reducers, not Case 1's 1,226× straggler.</p>
+      <span>FAIL TOGETHER</span>
+      <b>8 → 0 → 8</b>
+      <small>running tasks disappear, then restart</small>
+      <p>Two executor kills cause 16 failed task attempts. Not 16 independent OOMs.</p>
     </div>
   </div>
+  <div class="mt-4 text-sm text-slate-600">Attempt 1 repeats the pattern: two executor kills and 16 failed task attempts.</div>
 </div>
 
 <div v-else-if="$clicks === 2" class="mt-3">
   <div class="text-sm font-bold tracking-widest text-amber-700">5 · CORRELATE THE CLUES</div>
-  <div class="case2-plan mt-3">
-    <div class="fact"><b>259.29M trips</b><small>17.4 GiB plan data</small></div>
-    <i>→</i><div class="exchange"><b>Exchange + Sort</b><small>5.31 GiB shuffle write</small></div>
-    <div class="route"><b>70,225 routes</b><small>4.1 MiB plan data</small></div>
-    <i>→</i><div class="exchange"><b>Exchange + Sort</b><small>1.33 MiB shuffle write</small></div>
-    <div class="join"><b>SortMergeJoin</b><small>pickup + drop-off IDs</small></div>
+  <pre class="mt-3 rounded-xl bg-slate-900 p-4 text-base text-white"><code>ExecutorLostFailure · Exit status: 137
+Container killed on request. Killed by external signal.</code></pre>
+  <div class="grid grid-cols-3 gap-4 mt-4">
+    <div class="case2-clue"><span>EXECUTORS + ENVIRONMENT</span><b>8 tasks share one executor</b><small>56 GiB JVM heap + 384 MiB overhead. Python memory is outside the JVM heap.</small></div>
+    <div class="case2-clue"><span>FABRIC ADVICE / DRIVER LOG</span><b>Memory-related diagnosis</b><small>Spark_System_Executor_ExitCode137BadNode. No measured Python RSS in these logs.</small></div>
+    <div class="case2-clue"><span>EVIDENCE LIMIT</span><b>Exit 137 ≠ proof of OOM</b><small>Same host, “bad node” diagnostics. Failed-task memory metrics are missing, not zero.</small></div>
   </div>
-  <div class="grid grid-cols-3 gap-4 mt-5">
-    <div class="case2-clue"><span>SQL PLAN</span><b>Exchanges on both inputs</b><small>The 259M-row fact side is repartitioned to join 70K routes.</small></div>
-    <div class="case2-clue"><span>STAGE 24</span><b>259.36M records read</b><small>5.31 GiB fact shuffle plus 1.33 MiB route shuffle.</small></div>
-    <div class="case2-clue"><span>PRESSURE CHECK</span><b>0 spill · 4 ms fetch wait</b><small>Sorting and joining every fact row explains the broad task cost.</small></div>
-  </div>
-  <div class="mt-5 text-center text-xl font-semibold">The small input is 0.02% of the fact row count, but the plan shuffles both sides.</div>
+  <div class="mt-4 text-center text-xl font-semibold">Confirmed: repeated container kills. Suspect: the partition-sized Python list.</div>
 </div>
 
 <div v-else class="mt-3">
   <div class="text-sm font-bold tracking-widest text-emerald-700">6 · TEST ONE HYPOTHESIS</div>
   <div class="case2-hypothesis mt-3">
-    <div class="evidence"><span>EVIDENCE</span><b>259.29M rows shuffled</b><small>to join a 70,225-row route dimension</small></div>
+    <div class="evidence"><span>EVIDENCE</span><b>The Python stage repeatedly loses executors</b><small>The upstream scan and shuffle complete.</small></div>
     <i>→</i>
-    <div class="hypothesis"><span>HYPOTHESIS</span><b>The merge join is unnecessary</b><small>It forces the large-side Exchange and Sort.</small></div>
+    <div class="hypothesis"><span>HYPOTHESIS</span><b>Unbounded Python state exhausts memory</b><small>Millions of dictionaries per worker; no automatic list spill.</small></div>
     <i>→</i>
-    <div class="test"><span>ONE CHANGE</span><b><code>broadcast(routes)</code></b><small>Expect BroadcastHashJoin and no fact-side join exchange.</small></div>
+    <div class="test"><span>CODE CHANGE</span><b>Stream instead of buffer</b><small>Keep eight partitions and the same input. Retain only a row and column counters.</small></div>
+  </div>
+  <div class="grid grid-cols-2 gap-4 mt-4 text-sm">
+    <div class="rounded-lg bg-rose-50 p-3"><b>BAD · list</b><br /><code>records = [row.asDict() for row in rows]</code></div>
+    <div class="rounded-lg bg-emerald-50 p-3"><b>FIXED · generator</b><br /><code>records = (row.asDict() for row in rows)</code></div>
   </div>
 </div>
 
@@ -2293,24 +2295,6 @@ zoom: 0.85
 .case2-task-row b:first-child { text-align: left; }
 .case2-task-row { border-top: 1px solid #f1f5f9; }
 .case2-task-row.healthy { background: #f0fdf4; color: #166534; }
-.case2-plan {
-  display: grid;
-  grid-template-columns: 1fr auto 1.15fr 1fr auto 1.15fr 1.2fr;
-  grid-template-areas: 'fact fa fex join join join join' 'route ra rex join join join join';
-  align-items: center;
-  gap: 0.55rem;
-}
-.case2-plan > div { border: 1px solid #cbd5e1; border-radius: 0.75rem; background: white; padding: 0.65rem; text-align: center; }
-.case2-plan .fact { grid-area: fact; }
-.case2-plan .route { grid-area: route; }
-.case2-plan i:nth-of-type(1) { grid-area: fa; }
-.case2-plan i:nth-of-type(2) { grid-area: ra; }
-.case2-plan .exchange:nth-of-type(2) { grid-area: fex; }
-.case2-plan .exchange:nth-of-type(4) { grid-area: rex; }
-.case2-plan .join { grid-area: join; align-self: stretch; display: flex; flex-direction: column; justify-content: center; border: 2px solid #f59e0b; background: #fffbeb; color: #92400e; }
-.case2-plan .exchange { border-color: #fbbf24; background: #fffbeb; }
-.case2-plan small { display: block; margin-top: 0.2rem; color: #64748b; font-size: 0.65rem; }
-.case2-plan > i { color: #94a3b8; font-size: 1.5rem; font-style: normal; font-weight: 900; }
 .case2-clue { border: 1px solid #cbd5e1; border-radius: 0.8rem; background: #f8fafc; padding: 0.9rem; }
 .case2-clue > span { color: #64748b; }
 .case2-clue b { display: block; margin-top: 0.35rem; color: #0f172a; font-size: 1rem; }
@@ -2329,76 +2313,83 @@ zoom: 0.85
 </style>
 
 <!--
-reads the 2019–2024 trip history, joins on PULocationID and DOLocationID, writes to parquet, and has the expected SortMergeJoin.
+3 · LOCALIZE — BAD APPLICATION ATTEMPT 2
+In Spark History Server → Jobs → job 5, open the DAG. Then Stages → Stage 10: 53 successful tasks, 187.407 seconds, 259,287,888 input records, and 14,751,508,097 shuffle bytes written (13.74 GiB). The scan succeeds with zero recorded spill. Stage 11 is the unfinished Python profiling stage with eight partitions. Stage 12 has not been submitted in this capture. Do not search only Completed Stages: the problematic stage is still active/incomplete in the supplied log.
 
-3 · LOCALIZE
-Open SQL execution 6. It lasts 102.047 seconds. The full application lasts 140.128 seconds; setup, Delta metadata, and commit work account for the remainder.
+Open Stage 11 even though its call site is save at NativeMethodAccessorImpl.java:0. Its DAG/RDD details contain ShuffledRowRDD → PythonRDD → applySchemaToPythonRDD → partial aggregation. This is where the arbitrary Python code runs, not just the final Delta write.
 
-the bad join path is the combination of Stages 20 and 24:
-
- - Stage 20 — 50.742s: shuffles the 259M trip rows by pickup/drop-off IDs, writing 5.31 GiB.
- - Stage 24 — 46.739s: reads that shuffle, sorts/joins it with the route data, and partially aggregates.
-
-stage 21 = wrong for this application.. Do not add Stage 21's 47.546-second wall time to that path. It builds the 70,225 route rows, but its one task is launched 46.930 seconds after submission and runs for only 546 ms. It was submitted alongside the fact stage on the same eight-core executor and spent almost all of its displayed duration waiting for a slot.
-
-Stage 20 scans 259,287,888 trip rows in 53 tasks, lasts 50.742 seconds, and writes 5.31 GiB of serialized shuffle data. Stage 24 follows it: 256 tasks sort-merge the two inputs, partially aggregate the borough pairs, read 5.31 GiB from the fact exchange plus 1.33 MiB from the route exchange, and last 46.739 seconds. Stage 28 reads the 0.96 MiB partial aggregate, writes 64 output rows, and lasts 3.918 seconds.
- The route computation is small; moving the fact table is the cost.
+Source anchors: case2_mem_bad_attempt2:553 (Stage 10 completed), :554 (Stage 11 submitted), :564–573 and :586–593 (task failures). No successful Stage 11 task or final application outcome is present in either bad capture.
 
 [click]
-4 · INSPECT
-Open Stage 24 and use Summary Metrics for Completed Tasks. Its 256 task wall durations range from 0.242 to 4.172 seconds, with a 1.338-second median and 1.445-second mean. **The maximum is 3.1 times the median**, far below Case 1's 1.226-times straggler. All 256 tasks read shuffle data.he task timeline shows broad work rather than one task holding the stage open
+4 · INSPECT — TASK ATTEMPTS, NOT ONE SKEWED STRAGGLER
+Stage 11 → Tasks: show failed tasks, then compare Index/partition, Attempt, Executor ID, Launch Time, Duration, and Errors. Expand ExecutorLostFailure. The same indices 0–7 recur with task attempt 0 on executor 1 and attempt 1 on executor 2. The stage itself remains stage attempt 0; these are task retries, distinct from the application's two attempts.
 
-Shuffle read ranges from 3.24 MiB to 72.45 MiB, with a 19.93 MiB median. Records read range from 142,011 to 3,301,492, with a median of 927,943. The distribution is not perfectly flat, but the task timeline shows broad work rather than one task holding the stage open.
-The stage reports zero disk spill and four milliseconds of total shuffle fetch wait. With one eight-core executor, Spark runs the 256 reducers in roughly 32 waves. Their 1.427-second mean executor runtime predicts about 45.7 seconds of work across eight slots, which matches the 46.739-second stage. The cost is spread across the reducers.
+Expand the Event Timeline. In application attempt 2, the first eight tasks run from 08:06:28.694 to 08:09:38.521 UTC (189.827s). The next eight run from 08:09:49.653 to 08:15:40.409 (350.756s). Times may display in the browser's local timezone. All eight bars end together because a single executor dies, not because eight independent Python exceptions were observed. Two distinct executor losses produce 16 task failures.
 
-[click]
-5 · CORRELATE
-Open the final physical plan for SQL execution 6. Both inputs feed a SortMergeJoin Inner. The fact branch contains Exchange hashpartitioning(PULocationID, DOLocationID, 256) followed by Sort. Its ShuffleQueryStage reports 259.29 million rows and 17.4 GiB of plan data; Stage 20 writes 5.31 GiB of serialized shuffle bytes for the same 259,287,888 records.
+The bad event log ends after executor 3 registers. The third batch of task starts at 08:15:51 is additional DRIVER-LOG evidence, case2_stderr:6038–6045; do not promise that it is visible in the supplied event-log timeline. If demonstrating from these snapshots, stop the UI walkthrough after the second loss and show that driver-log excerpt separately.
 
-The route branch scans the 265-zone table twice, builds the 70,225-row Cartesian product, then passes through Exchange and Sort. Its ShuffleQueryStage reports 70.2 thousand rows and 4.1 MiB of plan data; Stage 21 writes 1.33 MiB of serialized shuffle. Plan data size and shuffle bytes are different Spark UI metrics.
+Optional: switch to application attempt 1. Stage 10 takes 114.466s; Stage 11 loses all eight tasks after 194.130s, then again after 276.466s. Return to attempt 2 afterward. Do not add the duplicate ExecutorRemoved events as extra dead executors. Across the two captures there are four distinct executor containers killed and 32 failed task attempts.
 
 [click]
-6 · TEST
-State one hypothesis: Spark was forced to use a sort-merge join for a 70,225-row route dimension. That choice repartitions and sorts all 259,287,888 fact rows before the join.
+5 · CORRELATE — EXECUTORS, ENVIRONMENT, LOGS
+Open Executors and include dead/removed executors. Inspect executors 1 and 2 and their removal reasons: exit 137, Container killed on request, Killed by external signal. In Environment → Spark Properties, find spark.executor.memory=56g, spark.executor.memoryOverhead=384m, spark.executor.cores=8, and spark.dynamicAllocation.maxExecutors=1. These are allocation settings, NOT measured peak usage. All eight profiling tasks share that one executor container.
 
-The expected physical plan contains BroadcastHashJoin and no Exchange on the trip branch before the join. The small final Exchange for groupBy(pickup_borough, dropoff_borough) remains because broadcasting does not remove the aggregation shuffle.
+Return to Fabric application details → Logs → Driver → stderr. Search for Lost executor, ExecutorLostFailure, 137, or Spark_System_Executor_ExitCode137BadNode. Use case2_stderr:5154–5201 for the first loss, :5956–6003 for the second, and :5216 for Fabric's memory-related advice. If the dead executor's stderr link says log listing unavailable, use the driver-log download; do not let a broken link derail the walkthrough. The Fabric advice may also appear in the application's diagnostics; the driver excerpt is the reliable fallback, not Diagnosis > Data Skew.
 
-Compare the join strategy, fact-side shuffle bytes, join-stage duration, joined row count, and the 64 final output rows. Removing the 5.31 GiB fact exchange while preserving the row counts supports the hypothesis. If the final plan still contains a fact-side Exchange before the join, the broadcast test did not take effect.
+Interpret carefully: exit 137 is SIGKILL, not by itself proof of OOM. Fabric's advice calls it memory-related, but the raw messages also say bad node and all bad-run losses occur on the same host. There is no measured Python RSS or explicit used-X/exceeded-Y memory diagnostic. The JVM OnOutOfMemoryError launch option in stderr is not an actual OOM exception.
+
+Failed Stage 11 tasks have no Task Metrics records: blank/zero-looking UI cells do not prove zero spill or low GC. Python objects are outside JVM heap accounting; Executors Storage Memory is cached Spark blocks, not total container memory. Do not sum per-task peak metrics and call that the executor's physical memory. Case 0 spilled managed state; this suspect is an ordinary Python list that cannot spill.
+
+[click]
+6 · TEST — CHANGE THE RETENTION, THEN CHECK THE EXPERIMENT
+Show the two comprehension lines. Square brackets materialize every row; parentheses make a generator. The counters and report schema stay the same. The profiler's retained state changes from proportional to partition size to proportional to the number of columns. More partitions or more memory can postpone the bad allocation; streaming removes the need to retain those records.
+
+Switch to the fixed run on the next slide. It completes, but inspect Environment and task placement before saying only one thing changed: this recorded fixed run used TWO concurrent executors, with four profiling tasks each, versus one executor with eight tasks in the bad run. That lowers memory competition too. Treat completion as supporting evidence, not an isolated proof of the code fix. A controlled follow-up would rerun fixed with the bad run's one-executor allocation, keeping the same input and eight partitions; configure resources before session launch.
 -->
 
 ---
+zoom: 0.85
+---
 
-# Case 2: recorded walkthrough
+# Case 2: streaming completes the report
 
-<video controls class="case-video" src="./videos/case2_recording.mp4"></video>
+<div class="text-sm font-bold tracking-widest text-emerald-700">OBSERVED RESULT · FIXED APPLICATION ATTEMPT 1</div>
 
-<style>
-.case-video {
-  display: block;
-  width: 100%;
-  max-height: 27rem;
-  object-fit: contain;
-}
-</style>
+<div class="grid grid-cols-3 gap-4 mt-4 text-center">
+  <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4"><div class="text-3xl font-bold text-emerald-800">10m 31.8s</div><div class="mt-1 text-sm">Spark application start → end</div></div>
+  <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4"><div class="text-3xl font-bold text-emerald-800">283 / 283</div><div class="mt-1 text-sm">tasks succeed · zero failed attempts</div></div>
+  <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4"><div class="text-3xl font-bold text-emerald-800">21 rows</div><div class="mt-1 text-sm">written to the Delta profile</div></div>
+</div>
+
+| Fixed-run stage | Wall time | Task-level evidence |
+|---|---:|---|
+| **10 · scan + repartition** | 99.2s | Same **259,287,888 rows** and **13.74 GiB** shuffle |
+| **11 · Python profiling** | **461.5s** | **8/8 succeed**, 32,410,983–32,410,989 records per task |
+| **12 · aggregate + write** | 25.5s | 168 partial profiles → **21 output rows** |
+
+<div class="mt-3 rounded-xl border-2 border-amber-300 bg-amber-50 p-4 text-base text-amber-950">
+  <b>Check the control:</b> bad = 1 executor × 8 profiling tasks; fixed = 2 executors × 4 tasks.<br />
+  Same per-executor memory, input, and partitions — but less memory competition. No clean speedup claim.
+</div>
 
 <!--
-You will see that there is one stage which still takes some time. If you open that, you will see that stage actually has no quirky metrics, nothing out of the ordinary
+SOURCE AND TIMING
+case2_mem_fixed records application_1790065465428_0001, attempt 1. SparkListenerApplicationStart at line 6 and ApplicationEnd at line 738 give 631.761 seconds = 10m31.761s (the reported approximately 11 minutes). This excludes any Fabric queue/pool startup before Spark's application-start event. All 283 TaskEnd events are Success, all eight jobs succeed, and all 14 submitted stages complete.
 
-This might actually be a bad example because the full execution of the fixed case seems to be taking longer. But the actual execution is taking a lot less time:
-Yes—for the full application comparison, mostly.
+LIVE WALKTHROUGH — FIXED RUN
+1. Fabric Recent runs → fixed application details → History Server. Confirm the FIXED job description, application ID, and attempt 1. Jobs shows all jobs completed; do not compare this duration to an invented one-hour completed bad run.
+2. Stages → Stage 10: 53 tasks, 99.170s, 259,287,888 input records, 14,751,508,097 shuffle bytes. Compare with bad Stage 10 to establish that the historical workload did not disappear. Source: case2_mem_fixed:561.
+3. Stages → Stage 11: 461.505s, eight successful tasks and no retries. Open Tasks and sort Shuffle Read Records: minimum 32,410,983, maximum 32,410,989. Each partition carries essentially the same row count: this is not a hot-key distribution. Task durations span 380.123–461.493s, with median 420.658s. The timeline shows eight tasks completing, not batches repeatedly being killed. Source: :563–580 task events, :581 stage completion.
+4. In Stage 11's Summary Metrics / task columns, show zero memory spill and zero disk spill for the completed fixed tasks. This is measured only for the fixed tasks, not the failed bad tasks, and does not measure Python RSS. Shuffle read still totals 13.74 GiB: the fix does not remove the shuffle. Its partial aggregate emits 168 records (8 partitions × 21 columns), writing only 7,320 bytes to the final shuffle.
+5. Stage 12 → task Output Records: the total is 21; two of its eight tasks have no rows. Stage wall time is 25.475s, including scheduling/resource handover, not 25 seconds of Python profiling. Source: :603. SQL → execution 8 shows Scan ExistingRDD → partial HashAggregate → Exchange hashpartitioning(column_name, 8) → final HashAggregate; inspect the final aggregate's number of output rows = 21. The ExistingRDD starts AFTER the Python boundary, so the list/generator itself is not visible in this SQL plan. If challenged on result correctness, 21 rows proves report shape, not each null count; use the separate native-count verification in CASES.md.
 
-┌─────────────────────────────┬────────┬───────┐
-│ Interval                    │ Bad    │ Fixed │
-├─────────────────────────────┼────────┼───────┤
-│ App start → main SQL starts │ 36.2s  │ 73.1s │
-├─────────────────────────────┼────────┼───────┤
-│ Main SQL execution          │ 102.0s │ 57.1s │
-├─────────────────────────────┼────────┼───────┤
-│ SQL end → app end           │ 1.9s   │ 3.9s  │
-└─────────────────────────────┴────────┴───────┘
+IMPORTANT CONTROL CHECK — SHOW THIS, DO NOT HIDE IT
+Open Environment → Spark Properties in BOTH applications. Bad spark.dynamicAllocation.maxExecutors=1; fixed=2. Both have spark.executor.cores=8, spark.executor.memory=56g, spark.executor.memoryOverhead=384m. In fixed Stage 11 → Tasks, show Executor ID: partitions 0,2,4,6 run on executor 1; partitions 1,3,5,7 run on executor 2. All eight start together, four per executor. Thus the fixed capture doubles the available executor memory and halves concurrent profiling tasks per executor. A successful run supports the diagnosis but cannot attribute the entire improvement to the generator alone. The next controlled test is fixed with the bad run's one-executor allocation.
 
+Open Executors → removed executors / event timeline. Fixed executor 2 is removed with 'Executor decommission: spark scale down'; executor 1 with 'Executor decommission: Asked to decommission 1'. Executor 3 is subsequently added. These are decommission events, NOT the bad run's exit-137 failures; no fixed task fails. Merely seeing removed executors is not evidence of OOM. Sources: case2_mem_fixed:576, :583, :585.
 
-The join was actually removed here, so the stage is not present
+TAKEAWAY
+The useful contrast is stalled/retried work versus a completed report, not a fabricated speedup ratio. Distinguish observed container kills, Fabric's automated memory diagnosis, the code-level hypothesis, and the resource difference in the test. In production, native Spark SQL null-count aggregates would avoid this Python row-by-row path altogether; streaming here isolates the retention pattern in the code.
 -->
 
 ---
