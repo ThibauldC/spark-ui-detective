@@ -2029,6 +2029,19 @@ Optional: switch to application attempt 1. Stage 10 takes 114.466s; Stage 11 los
 
 [click]
 5 · CORRELATE — EXECUTORS, ENVIRONMENT, LOGS
+Stage 11 is where the Python profiler runs, but the SQL plan cannot show the list allocation inside profile_partition.
+
+For these captures, the trail in the Spark History Server is:
+
+1. Jobs → Job 5 → Stage 11. This is the eight-task stage with the failed attempts. Its stage DAG includes PythonRDD, after the round-robin shuffle in Stage 10.
+2. SQL → execution 8 (“CASE 2 BAD: unbounded Python partition profiling”). Its plan starts at Scan ExistingRDD and then shows the HashAggregate and Exchange for the report. ExistingRDD is the hand-off from
+   trips.rdd.mapPartitions(profile_partition) back into a DataFrame—not a representation of the Python code.
+3. Stage 11’s failed attempts → executor loss. The captured task failures report exit 137. That localizes the failure to the profiling stage, but exit 137 alone does not prove an OOM; use the container
+
+-> it is still difficult to correlate that failed stage to an exact piece of code..
+
+
+   diagnostics or process-memory evidence for that claim.
 Open Executors and include dead/removed executors. Inspect executors 1 and 2 and their removal reasons: exit 137, Container killed on request, Killed by external signal. In Environment → Spark Properties, find spark.executor.memory=56g, spark.executor.memoryOverhead=384m, spark.executor.cores=8, and spark.dynamicAllocation.maxExecutors=1. These are allocation settings, NOT measured peak usage. All eight profiling tasks share that one executor container.
 
 Return to Fabric application details → Logs → Driver → stderr. Search for Lost executor, ExecutorLostFailure, 137, or Spark_System_Executor_ExitCode137BadNode. Use case2_stderr:5154–5201 for the first loss, :5956–6003 for the second, and :5216 for Fabric's memory-related advice. If the dead executor's stderr link says log listing unavailable, use the driver-log download; do not let a broken link derail the walkthrough. The Fabric advice may also appear in the application's diagnostics; the driver excerpt is the reliable fallback, not Diagnosis > Data Skew.
@@ -2044,9 +2057,6 @@ Show the two comprehension lines. Square brackets materialize every row; parenth
 Switch to the fixed run on the next slide. It completes, but inspect Environment and task placement before saying only one thing changed: this recorded fixed run used TWO concurrent executors, with four profiling tasks each, versus one executor with eight tasks in the bad run. That lowers memory competition too. Treat completion as supporting evidence, not an isolated proof of the code fix. A controlled follow-up would rerun fixed with the bad run's one-executor allocation, keeping the same input and eight partitions; configure resources before session launch.
 
 
-FIXED:
-case2_mem_fixed records application_1790065465428_0001, attempt 1. SparkListenerApplicationStart at line 6 and ApplicationEnd at line 738 give 631.761 seconds = 10m31.761s (the reported approximately 11 minutes). This excludes any Fabric queue/pool startup before Spark's application-start event. All 283 TaskEnd events are Success, all eight jobs succeed, and all 14 submitted stages complete.
-
 LIVE WALKTHROUGH — FIXED RUN
 1. Fabric Recent runs → fixed application details → History Server. Confirm the FIXED job description, application ID, and attempt 1. Jobs shows all jobs completed; do not compare this duration to an invented one-hour completed bad run.
 2. Stages → Stage 10: 53 tasks, 99.170s, 259,287,888 input records, 14,751,508,097 shuffle bytes. Compare with bad Stage 10 to establish that the historical workload did not disappear. Source: case2_mem_fixed:561.
@@ -2061,6 +2071,23 @@ Open Executors → removed executors / event timeline. Fixed executor 2 is remov
 
 TAKEAWAY
 The useful contrast is stalled/retried work versus a completed report, not a fabricated speedup ratio. Distinguish observed container kills, Fabric's automated memory diagnosis, the code-level hypothesis, and the resource difference in the test. In production, native Spark SQL null-count aggregates would avoid this Python row-by-row path altogether; streaming here isolates the retention pattern in the code
+-->
+---
+
+# Case 2: recorded walkthrough
+
+<video controls class="case-video" src="./videos/case2_recording.mp4"></video>
+
+<style>
+.case-video {
+  display: block;
+  width: 100%;
+  max-height: 27rem;
+  object-fit: contain;
+}
+</style>
+
+<!--
 -->
 
 ---
@@ -2298,20 +2325,6 @@ Repartitioning may add an Exchange and shuffle; that is the cost of creating par
 
 <!--
 You will see that there is one stage which still takes some time. If you open that, you will see that stage actually has no quirky metrics, nothing out of the ordinary
-
-This might actually be a bad example because the full execution of the fixed case seems to be taking longer. But the actual execution is taking a lot less time:
-Yes—for the full application comparison, mostly.
-
-┌─────────────────────────────┬────────┬───────┐
-│ Interval                    │ Bad    │ Fixed │
-├─────────────────────────────┼────────┼───────┤
-│ App start → main SQL starts │ 36.2s  │ 73.1s │
-├─────────────────────────────┼────────┼───────┤
-│ Main SQL execution          │ 102.0s │ 57.1s │
-├─────────────────────────────┼────────┼───────┤
-│ SQL end → app end           │ 1.9s   │ 3.9s  │
-└─────────────────────────────┴────────┴───────┘
-
 
 The join was actually removed here, so the stage is not present
 -->
