@@ -361,7 +361,7 @@ Spark cluster
 
 The Spark cluster is created as follows: 1 driver, 1 or more workers or nodes
 
-Start on the left: the notebook submits an action to the driver. The driver is the coordinator. It plans the work, schedules it, and tracks progress; it is not where all the rows are processed. Notebook asks SparkSession this is a driver process. SparkSession manages Spark application (1-to-1 relation)
+[click] Start on the left: the notebook submits an action to the driver. The driver is the coordinator. It plans the work, schedules it, and tracks progress; it is not where all the rows are processed. Notebook asks SparkSession this is a driver process. SparkSession manages Spark application (1-to-1 relation)
 
 When an action runs—such as count(), show(), collect(), or write()—the driver:
      - analyzes and optimizes the logical plan
@@ -369,7 +369,7 @@ When an action runs—such as count(), show(), collect(), or write()—the drive
      - splits it into stages at shuffle boundaries
      - sends tasks to executors
 
-The driver fans work out to multiple worker nodes. Each worker hosts an executor with several parallel slots, so partitions can be processed at the same time. More workers mean more possible parallelism.
+[click] The driver fans work out to multiple worker nodes. Each worker hosts an executor with several parallel slots, so partitions can be processed at the same time. More workers mean more possible parallelism.
 Executors process their assigned partitions. They read data, run the pipelined operators, perform shuffles where necessary, and return results or write output.
 -->
 
@@ -382,7 +382,7 @@ Executors process their assigned partitions. They read data, run the pipelined o
 <div class="action-to-job">
   <div class="action-code-card">
     <div class="flow-label">NOTEBOOK</div>
-    <div class="action-code"><span>trips = spark.read.table("trips")</span><span>&nbsp;</span><span>(trips.filter("fare is positive")</span><span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.groupBy("zone")</span><span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.count()</span><span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.write.saveAsTable("daily"))</span></div>
+    <div class="action-code"><span>trips = spark.read.table("trips")</span><span>&nbsp;</span><span>(trips.filter("fare is positive")</span><span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.groupBy("zone")</span><span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.sum("fare")</span><span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.write.saveAsTable("daily"))</span></div>
     <div class="action-callout"><b><code>write()</code></b> is the action: Spark must now do the work.</div>
   </div>
 
@@ -514,11 +514,13 @@ spark hierarchy of execution
 
 2 types of building blocks in a Spark job: A transformation creates a new RDD/DataFrame from an existing one (it describes a step in your pipeline - like a select, filter, join etc) and is evaluated lazily. An action asks Spark to materialize a result (return to the driver, write to storage, or otherwise “finish” the computation), which is what triggers a job in Spark’s execution model.
 
-Stage 0 reads, filters, and performs a partial aggregate across four partitions, so it has four tasks. 
-A task processes one partition and can pipeline several narrow operations without materializing intermediate results: read → select → filter → map
-groupBy redistributes rows by zone: that shuffle ends Stage 0. Stage 1 performs the final aggregate and writes its three output partitions.
+[click] The final `write()` triggers the job.
 
-Clarify the potentially confusing `count()` here: `groupBy("zone").count()` is a grouped DataFrame aggregation that returns a new DataFrame, so it is still lazy in this chain. A standalone `df.count()` is different: it is an action, materializes the result, and creates a job. In this example the final `write()` is the action that triggers the whole plan.
+[click] Stage 0 reads, filters, and performs a partial aggregate across four partitions. `groupBy` redistributes rows by zone: that shuffle ends Stage 0. Stage 1 performs the final aggregate and writes its three output partitions.
+
+[click] Each task processes one partition and can pipeline several narrow operations without materializing intermediate results: read → select → filter → map.
+
+`groupBy("zone").sum("fare")` is still a lazy transformation; the final `write()` is the action that triggers the whole plan.
 -->
 
 ---
