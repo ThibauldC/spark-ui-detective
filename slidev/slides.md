@@ -1,4 +1,4 @@
----
+  ---
 theme: light-icons
 title: The Spark Detective
 info: |
@@ -1531,6 +1531,13 @@ Open Stage 13 because it is the longest stage and the spill appears there.
 
 [click]
 4 · INSPECT
+
+- upstream tasks divide their output into eight shuffle partitions, one reducer task for each partition
+- aggregation, sort, or join: Spark keeps intermediate state in the executor’s execution memory. If that state no longer fits, Spark writes part of it to temporary files on the executor’s local disk
+- extra serialization, disk I/O, and merging
+
+
+
 On the Stage 13 detail page, use Summary Metrics for Completed Tasks and the Tasks table. Sort by Duration, Shuffle Read Size, and Disk Spill.
 
 The upstream tasks divide their output into eight shuffle partitions; Stage 13 starts one reducer task for each partition. Each reducer fetches all records assigned to its partition and runs the final deduplication and aggregation for those records.
@@ -1544,12 +1551,22 @@ This deduplication has many distinct keys, so the reducer must retain a large am
 
 [click]
 5 · CORRELATE
+- hashpartitioning on pickup and drop-off location with 8 partition
+- 
+
 Open Spark History Server → SQL and select the write execution. In the final physical plan, follow the scan through HashAggregate to Exchange. The Exchange details show hashpartitioning on pickup and drop-off location with 8 partitions. The shuffle stage carries 259.3 million rows and an estimated 25.1 GiB.
 Return to Stage 13 to connect that Exchange to 8 reducer tasks, 44.44 GB memory spill, and 7.33 GB disk spill
 In Executors, executor 1 has 8 cores. All eight reducer tasks can run at once. 
 
 [click]
 6 · TEST
+- too much aggregation state and spills to disk
+- Increasing the partition count will create smaller tasks that run in waves
+- all eight large tasks run together, and each competes for execution memory while holding about one eighth of the shuffle
+- 256: 256 smaller tasks in about 32 waves (still only eight tasks at once). Completed tasks release their memory before the next wave starts
+
+
+
 State the hypothesis: the historical input grew, but the shuffle stayed at eight partitions. Each reducer now owns too much aggregation state and spills to disk. Increasing the partition count will create smaller tasks that run in waves; it does not require more cores to reduce each task's aggregation state.
 
 Why do more partitions help when the executor count stays the same? Executors determine how many tasks run at once; partitions determine how much data and aggregation state each task owns. With one 8-core executor and 8 partitions, all eight large tasks run together, and each competes for execution memory while holding about one eighth of the shuffle. With 256 partitions, the executor still runs only eight tasks at once, but each task owns roughly one thirty-second as much data. Spark processes the 256 smaller tasks in about 32 waves. Completed tasks release their memory before the next wave starts.
@@ -1780,6 +1797,11 @@ Open Stages and sort Completed Stages by Duration. Stage 8 is the parquet join-a
 [click]
 4 · INSPECT
 
+- Only eight of the 256 tasks have nonzero shuffle read because the join key has only eight rule value
+- decisive clue is that one partition owns 88.7% of all shuffle records
+
+
+
 **Only eight of the 256 tasks have nonzero shuffle read because the join key has only eight rule values. That alone is not the diagnosis. The decisive clue is that one partition owns 88.7% of all shuffle records; the next largest partitions read only 6.77 million and 4.38 million rows.**
 
 Open Stage 8. First look at the event timeline: Task 89, for partition 75, starts with the first wave and extends almost to the end of the stage while the other task bars disappear.
@@ -1787,6 +1809,11 @@ In Summary Metrics for Completed Tasks, compare maximum, mean, and median durati
 
 [click]
 5 · CORRELATE
+-  119.14 million rows on the fact-side ShuffleQueryStage and only eight rows on the rule side.
+- sort merge join: datasets are shuffled across the cluster so rows with matching join keys end up on the same executor.
+- broadcast: shuffling both datasets across the cluster, the smaller table is copied, or “broadcasted,” to every worker node. Each executor then performs the join locally with its partition of the larger dataset.
+
+
 In SQL, open the final physical plan for execution 1. Follow the fact scan to Exchange hashpartitioning(fare_rule, 256), Sort, SortMergeJoin LeftOuter, and WriteFiles. The final plan reports 119.14 million rows on the fact-side ShuffleQueryStage and only eight rows on the rule side. Broadcasting is disabled in this demo, so both sides pass through an Exchange and the shuffled join remains visible.
 Now open Diagnosis for job 5. Data Skew flags Stage 8 with 3,319.71 MB maximum task data read versus 14.54 MB mean. Time Skew flags the same stage with 142.23 seconds maximum versus 0.88 seconds mean. These values are persisted as Fabric advice events in case1_logs_bad; they independently confirm what the task table shows.
 Return to Stage 8 and check spill and shuffle fetch wait. Both total zero. The hot task spends 125.4 seconds of CPU time during its 142.2-second duration. In Executors, the application has one eight-core executor; after the short tasks finish, one core remains occupied by the hot partition while the other slots have no comparable work. This rules out disk spill and network wait and supports data skew at the join.
@@ -1843,17 +1870,12 @@ It adds one of 8,192 deterministic salts to each trip, replicates the eight-row 
 <!--
 The business output is a null-count profile: 21 normalized columns become 21 report rows. The bad mapPartitions function first evaluates [row.asDict() for row in rows], retaining every dictionary. The fixed function uses a generator expression and retains only the current record and column counters. This is executor-side Python, NOT a driver collect() or toPandas(). The 21-row output is observed in the fixed run; the bad captures never reach a completed report.
 
-t means Spark can automatically move some of its own intermediate data from memory to local disk, but it cannot do that for arbitrary Python objects your code creates. Python code creates millions of dictionaries of all rows.
+It means Spark can automatically move some of its own intermediate data from memory to local disk, but it cannot do that for arbitrary Python objects your code creates. Python code creates millions of dictionaries of all rows.
 
  A Python list is just an in-memory object. Spark does not inspect it and decide which elements to write to disk. The Python worker owns it, outside Spark’s managed aggregation/sort/join memory structures. If
  memory becomes exhausted, the Python process or executor may be killed.
 
- Spark-managed operators such as hash aggregation, sorting, and shuffling use spill-aware data structures:
-
-PREPARE THE UI
-Open Fabric Recent runs / Monitor hub → the bad Spark Job Definition run → application details → Spark History Server. Confirm application_1790060503449_0001 and choose application attempt 2. Keep attempt 1 available to show recurrence, but do not mix their task IDs or timelines. Open the fixed application_1790065465428_0001, attempt 1, in another tab. Stage IDs 10, 11, and 12 happen to match across these captures; identify their work, not just their numbers.
-
-Start with Jobs → job 5, labelled CASE 2 BAD: unbounded Python partition profiling. Its DAG connects the completed scan/shuffle Stage 10 to Python profiling Stage 11 and the final aggregate/write Stage 12. The stage call site says save; expand the Stage 11 DAG to find PythonRDD and ShuffledRowRDD. SQL alone does not expose the body of the Python function.
+:
 
 The rehearsal reported the bad workload still running after roughly an hour; that is not a completed runtime. The supplied bad event logs have no ApplicationEnd or final job outcome. If the run was subsequently cancelled, label it cancelled, not completed. Do not present the hour as an event-log-measured duration or compute a speedup against it.
 -->
@@ -2010,22 +2032,24 @@ Container killed on request. Killed by external signal.</code></pre>
 </style>
 
 <!--
-3 · LOCALIZE — BAD APPLICATION ATTEMPT 2
+3 · LOCALIZE
+
+- Stage 11 is the unfinished Python profiling stage with eight partitions.
+- Open Stage 11 even though its call site is save at NativeMethodAccessorImpl.java:0. Its DAG/RDD details contain ShuffledRowRDD → PythonRDD → applySchemaToPythonRDD → partial aggregation. This is where the arbitrary Python code runs, 
+
+
 In Spark History Server → Jobs → job 5, open the DAG. Then Stages → Stage 10: 53 successful tasks, 187.407 seconds, 259,287,888 input records, and 14,751,508,097 shuffle bytes written (13.74 GiB). The scan succeeds with zero recorded spill. Stage 11 is the unfinished Python profiling stage with eight partitions. Stage 12 has not been submitted in this capture. Do not search only Completed Stages: the problematic stage is still active/incomplete in the supplied log.
 
 Open Stage 11 even though its call site is save at NativeMethodAccessorImpl.java:0. Its DAG/RDD details contain ShuffledRowRDD → PythonRDD → applySchemaToPythonRDD → partial aggregation. This is where the arbitrary Python code runs, not just the final Delta write.
-
-Source anchors: case2_mem_bad_attempt2:553 (Stage 10 completed), :554 (Stage 11 submitted), :564–573 and :586–593 (task failures). No successful Stage 11 task or final application outcome is present in either bad capture.
 
 [click]
 4 · INSPECT — TASK ATTEMPTS, NOT ONE SKEWED STRAGGLER
 Stage 11 → Tasks: show failed tasks, then compare Index/partition, Attempt, Executor ID, Launch Time, Duration, and Errors. Expand ExecutorLostFailure. The same indices 0–7 recur with task attempt 0 on executor 1 and attempt 1 on executor 2. The stage itself remains stage attempt 0; these are task retries, distinct from the application's two attempts.
 
-Expand the Event Timeline. In application attempt 2, the first eight tasks run from 08:06:28.694 to 08:09:38.521 UTC (189.827s). The next eight run from 08:09:49.653 to 08:15:40.409 (350.756s). Times may display in the browser's local timezone. All eight bars end together because a single executor dies, not because eight independent Python exceptions were observed. Two distinct executor losses produce 16 task failures.
+
+Expand the Event Timeline. In application attempt 2, the first eight tasks run from 08:06:28.694 to 08:09:38.521 UTC (189.827s). The next eight run from 08:09:49.653 to 08:15:40.409 (350.756s). All eight bars end together because a single executor dies, not because eight independent Python exceptions were observed. Two distinct executor losses produce 16 task failures.
 
 The bad event log ends after executor 3 registers. The third batch of task starts at 08:15:51 is additional DRIVER-LOG evidence, case2_stderr:6038–6045; do not promise that it is visible in the supplied event-log timeline. If demonstrating from these snapshots, stop the UI walkthrough after the second loss and show that driver-log excerpt separately.
-
-Optional: switch to application attempt 1. Stage 10 takes 114.466s; Stage 11 loses all eight tasks after 194.130s, then again after 276.466s. Return to attempt 2 afterward. Do not add the duplicate ExecutorRemoved events as extra dead executors. Across the two captures there are four distinct executor containers killed and 32 failed task attempts.
 
 [click]
 5 · CORRELATE — EXECUTORS, ENVIRONMENT, LOGS
@@ -2035,8 +2059,8 @@ For these captures, the trail in the Spark History Server is:
 
 1. Jobs → Job 5 → Stage 11. This is the eight-task stage with the failed attempts. Its stage DAG includes PythonRDD, after the round-robin shuffle in Stage 10.
 2. SQL → execution 8 (“CASE 2 BAD: unbounded Python partition profiling”). Its plan starts at Scan ExistingRDD and then shows the HashAggregate and Exchange for the report. ExistingRDD is the hand-off from
-   trips.rdd.mapPartitions(profile_partition) back into a DataFrame—not a representation of the Python code.
-3. Stage 11’s failed attempts → executor loss. The captured task failures report exit 137. That localizes the failure to the profiling stage, but exit 137 alone does not prove an OOM; use the container
+   trips.rdd.mapPartitions(profile_partition) back into a DataFrame, not a representation of the Python code.
+3. Stage 11’s failed attempts → executor loss. The captured task failures report exit 137. That localizes the failure to the profiling stage, but exit 137 alone does not prove an OOM
 
 -> it is still difficult to correlate that failed stage to an exact piece of code..
 
@@ -2044,15 +2068,18 @@ For these captures, the trail in the Spark History Server is:
    diagnostics or process-memory evidence for that claim.
 Open Executors and include dead/removed executors. Inspect executors 1 and 2 and their removal reasons: exit 137, Container killed on request, Killed by external signal. In Environment → Spark Properties, find spark.executor.memory=56g, spark.executor.memoryOverhead=384m, spark.executor.cores=8, and spark.dynamicAllocation.maxExecutors=1. These are allocation settings, NOT measured peak usage. All eight profiling tasks share that one executor container.
 
-Return to Fabric application details → Logs → Driver → stderr. Search for Lost executor, ExecutorLostFailure, 137, or Spark_System_Executor_ExitCode137BadNode. Use case2_stderr:5154–5201 for the first loss, :5956–6003 for the second, and :5216 for Fabric's memory-related advice. If the dead executor's stderr link says log listing unavailable, use the driver-log download; do not let a broken link derail the walkthrough. The Fabric advice may also appear in the application's diagnostics; the driver excerpt is the reliable fallback, not Diagnosis > Data Skew.
-
-Interpret carefully: exit 137 is SIGKILL, not by itself proof of OOM. Fabric's advice calls it memory-related, but the raw messages also say bad node and all bad-run losses occur on the same host. There is no measured Python RSS or explicit used-X/exceeded-Y memory diagnostic. The JVM OnOutOfMemoryError launch option in stderr is not an actual OOM exception.
-
-Failed Stage 11 tasks have no Task Metrics records: blank/zero-looking UI cells do not prove zero spill or low GC. Python objects are outside JVM heap accounting; Executors Storage Memory is cached Spark blocks, not total container memory. Do not sum per-task peak metrics and call that the executor's physical memory. Case 0 spilled managed state; this suspect is an ordinary Python list that cannot spill.
+Interpret carefully: exit 137 is SIGKILL, not by itself proof of OOM. Fabric's advice calls it memory-related, but the raw messages also say bad node and all bad-run losses occur on the same host. There is no measured Python RSS or explicit used-X/exceeded-Y memory diagnostic. 
 
 [click]
-6 · TEST — CHANGE THE RETENTION, THEN CHECK THE EXPERIMENT
-Show the two comprehension lines. Square brackets materialize every row; parentheses make a generator. The counters and report schema stay the same. The profiler's retained state changes from proportional to partition size to proportional to the number of columns. More partitions or more memory can postpone the bad allocation; streaming removes the need to retain those records.
+6 · TEST
+- Profiling using plain Python and list comprehension. executor-side Python, NOT a driver collect() or toPandas()
+- A Python list is just an in-memory object. Spark does not inspect it and decide which elements to write to disk. The Python worker owns it, outside Spark’s managed aggregation/sort/join memory structures
+- If memory becomes exhausted, the Python process or executor may be killed.
+- Spark-managed operators such as hash aggregation, sorting, and shuffling use spill-aware data structures
+- Create generator instead, so streaming. and retains only the current record and column counters.
+
+
+The counters and report schema stay the same. The profiler's retained state changes from proportional to partition size to proportional to the number of columns. More partitions or more memory can postpone the bad allocation; streaming removes the need to retain those records.
 
 Switch to the fixed run on the next slide. It completes, but inspect Environment and task placement before saying only one thing changed: this recorded fixed run used TWO concurrent executors, with four profiling tasks each, versus one executor with eight tasks in the bad run. That lowers memory competition too. Treat completion as supporting evidence, not an isolated proof of the code fix. A controlled follow-up would rerun fixed with the bad run's one-executor allocation, keeping the same input and eight partitions; configure resources before session launch.
 
@@ -2064,8 +2091,6 @@ LIVE WALKTHROUGH — FIXED RUN
 4. In Stage 11's Summary Metrics / task columns, show zero memory spill and zero disk spill for the completed fixed tasks. This is measured only for the fixed tasks, not the failed bad tasks, and does not measure Python RSS. Shuffle read still totals 13.74 GiB: the fix does not remove the shuffle. Its partial aggregate emits 168 records (8 partitions × 21 columns), writing only 7,320 bytes to the final shuffle.
 5. Stage 12 → task Output Records: the total is 21; two of its eight tasks have no rows. Stage wall time is 25.475s, including scheduling/resource handover, not 25 seconds of Python profiling. Source: :603. SQL → execution 8 shows Scan ExistingRDD → partial HashAggregate → Exchange hashpartitioning(column_name, 8) → final HashAggregate; inspect the final aggregate's number of output rows = 21. The ExistingRDD starts AFTER the Python boundary, so the list/generator itself is not visible in this SQL plan. If challenged on result correctness, 21 rows proves report shape, not each null count; use the separate native-count verification in CASES.md.
 
-IMPORTANT CONTROL CHECK — SHOW THIS, DO NOT HIDE IT
-Open Environment → Spark Properties in BOTH applications. Bad spark.dynamicAllocation.maxExecutors=1; fixed=2. Both have spark.executor.cores=8, spark.executor.memory=56g, spark.executor.memoryOverhead=384m. In fixed Stage 11 → Tasks, show Executor ID: partitions 0,2,4,6 run on executor 1; partitions 1,3,5,7 run on executor 2. All eight start together, four per executor. Thus the fixed capture doubles the available executor memory and halves concurrent profiling tasks per executor. A successful run supports the diagnosis but cannot attribute the entire improvement to the generator alone. The next controlled test is fixed with the bad run's one-executor allocation.
 
 Open Executors → removed executors / event timeline. Fixed executor 2 is removed with 'Executor decommission: spark scale down'; executor 1 with 'Executor decommission: Asked to decommission 1'. Executor 3 is subsequently added. These are decommission events, NOT the bad run's exit-137 failures; no fixed task fails. Merely seeing removed executors is not evidence of OOM. Sources: case2_mem_fixed:576, :583, :585.
 
@@ -2290,7 +2315,11 @@ Open Stages and sort by Duration. Stage 4, named for the CSV call site, lasts 53
 
 [click]
 4 · INSPECT
-The executor-added event records one executor with eight cores, and the resource profile assigns one CPU to each task. Stage 4 can therefore occupy only one of eight task slots. The event log proves poor Spark task parallelism; it does not contain a persisted Fabric Executor Usage advice event, so do not quote a Diagnosis percentage for this run.
+- Stage 4 can therefore occupy only one of eight task slots. The event log proves poor Spark task parallelism;
+- This is not a skewed distribution (like case 1) because there is no distribution: one task owns the whole write.
+
+
+The executor-added event records one executor with eight cores, and the resource profile assigns one CPU to each task. Stage 4 can therefore occupy only one of eight task slots. The event log proves poor Spark task parallelism
 
 Open Stage 4. Its event timeline contains one bar: Task 52 for partition 0 runs for 537.949 seconds. The task reads 79,479,946 records and 1,556,145,733 bytes, then writes the same 79,479,946 records and 1,271,759,612 gzip-compressed bytes. The SQL output metrics confirm one written file.
 The task spends 537.760 seconds in executor run time and 508.366 seconds on executor CPU. JVM garbage collection takes 0.944 seconds. Memory spill, disk spill, shuffle read, and shuffle write are all zero. This is not a skewed distribution because there is no distribution: one task owns the whole write.
@@ -2298,6 +2327,9 @@ The task spends 537.760 seconds in executor run time and 508.366 seconds on exec
 
 [click]
 5 · CORRELATE
+- Coalesce has the argument 1 and sits immediately before WriteFiles.
+
+
 Open the physical plan for SQL execution 1. Read it from Scan parquet through ColumnarToRow, Filter, Project, Coalesce, WriteFiles, and Execute InsertIntoHadoopFsRelationCommand. The Project formats both timestamp columns and selects the ten CSV columns. Coalesce has the argument 1 and sits immediately before WriteFiles.
 There is no Exchange in this plan. The scan metrics report 24 source partitions and 29 files, but coalesce(1) combines that input into one output partition. Stage 4 consequently launches one task, and that task performs the scan, timestamp formatting, CSV serialization, gzip compression, and output write.
 Correlate the plan with the executor and output events. Executor 1 has eight cores, but the stage offers one task. Write metrics report one file, 79,479,946 rows, and 1,271,759,612 bytes. Job commit takes only 328 milliseconds, so commit overhead does not explain the nine-minute stage. The serial data path does.
