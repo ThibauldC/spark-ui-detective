@@ -1,4 +1,4 @@
-  ---
+---
 theme: light-icons
 title: The Spark Detective
 info: |
