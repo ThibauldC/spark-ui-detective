@@ -20,9 +20,16 @@ jobs:
           cache-dependency-path: slidev/package-lock.json
       - run: npm ci
         working-directory: slidev
-      - run: npm run export -- --output the-spark-detective.pdf
+      - name: Export PDF with EMFCC26 backgrounds
+        run: npm run export -- --range "1-22,24-25,27-29,30-31,33" --format pdf --output spark-ui-detective-emfcc26.pdf --per-slide
         working-directory: slidev
-      - run: test -s slidev/the-spark-detective.pdf
+      - run: test -s slidev/spark-ui-detective-emfcc26.pdf
+      - name: Export PDF without backgrounds
+        run: npm run export -- --range "2-22,24-25,27-29,30-31" --format pdf --output spark-ui-detective.pdf --per-slide
+        working-directory: slidev
+        env:
+          VITE_NO_BG: "1"
+      - run: test -s slidev/spark-ui-detective.pdf
       - run: npm run build
         working-directory: slidev
       - run: zip -r ../the-spark-detective-web.zip .
@@ -34,7 +41,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: >-
           gh release create "$GITHUB_REF_NAME"
-          slidev/the-spark-detective.pdf
+          slidev/spark-ui-detective-emfcc26.pdf
+          slidev/spark-ui-detective.pdf
           slidev/the-spark-detective-web.zip
           --title "The Spark Detective $GITHUB_REF_NAME"
           --generate-notes
