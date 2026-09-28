@@ -124,3 +124,13 @@
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+
+html.no-bg .slidev-layout,
+html.no-bg .slidev-layout.emfcc-cover,
+html.no-bg .slidev-layout.emfcc-end {
+  background-image: none !important;
+}
+
+html.no-bg .slidev-layout.emfcc-title {
+  background: var(--emfcc-navy) !important;
+}
