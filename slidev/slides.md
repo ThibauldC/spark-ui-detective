@@ -513,7 +513,12 @@ spark hierarchy of execution
 
 2 types of building blocks in a Spark job: A transformation creates a new RDD/DataFrame from an existing one (it describes a step in your pipeline - like a select, filter, join etc) and is evaluated lazily. An action asks Spark to materialize a result (return to the driver, write to storage, or otherwise “finish” the computation), which is what triggers a job in Spark’s execution model.
 
-[click] The final `write()` triggers the job.
+[click] The final `write()` triggers the job. 
+
+Shuffles are triggered by something called wide transformations
+Narrow: transformations for which each input partition will contribute to only one output partition (filter)
+Wide: input partitions will contribute to many output partitions
+a join is logically a transformation, but whether it creates a wide dependency depends on the physical join strategy.
 
 [click] Stage 0 reads, filters, and performs a partial aggregate across four partitions. `groupBy` redistributes rows by zone: that shuffle ends Stage 0. Stage 1 performs the final aggregate and writes its three output partitions.
 
@@ -644,10 +649,6 @@ zoom: 0.85
 </style>
 
 <!--
-A stage groups operations that Spark can pipeline without redistributing data. The important boundary is the shuffle. Shuffles are triggered by something called wide transformations
-Narrow: transformations for which each input partition will contribute to only one output partition (filter)
-Wide: input partitions will contribute to many output partitions
-a join is logically a transformation, but whether it creates a wide dependency depends on the physical join strategy.
 
 Here Spark scans, filters, and performs a partial aggregation in Stage 12. The shuffle redistributes records by key. Stage 13 can then finish the aggregation and write the result.
 
@@ -2063,6 +2064,18 @@ The bad event log ends after executor 3 registers. The third batch of task start
 5 · CORRELATE — EXECUTORS, ENVIRONMENT, LOGS
 
 Stage 11 is where the Python profiler runs, but the SQL plan cannot show the list allocation inside profile_partition.
+
+ Stage 11 (8 tasks, one per partition, all on the 8 cores of the one executor): each task does this:
+  1. The JVM task fetches its partition, about 32.4M rows.
+  2. It starts a separate Python worker process and streams the rows to it in pickled batches. That makes 8 Python processes, all inside the same         executor container.
+  3. In Python, profile_partition runs [row.asDict() for row in rows]. It turns every row into a dict of about 21 keys, with a Python object for each
+     value, and keeps all of them. That is roughly 1 KB per trip, so tens of GB per process, times 8 processes.
+  4. Nothing is counted or output until the list is complete. In the UI the tasks just look "running", with no progress.
+  5. That memory sits in the Python processes, outside the JVM heap. Spark can't see it and can't spill it to disk. GC time, spill and Peak Execution
+     Memory stay low.
+  6. The container's combined memory passes its limit, and the whole container gets SIGKILL (exit 137). All 8 tasks die at the same instant because
+     they share that one container. That's why the 8 timeline bars end together, and why it counts as 1 executor kill, not 8 separate OOMs. The time
+     until the kill varies (190 s, 276 s, 351 s) depending on when the combined memory crosses the limit.
 
 For these captures, the trail in the Spark History Server is:
 
