@@ -2357,6 +2357,15 @@ The join was actually removed here, so the stage is not present
 -->
 
 ---
+
+# Questions?
+
+<div style="text-align: center;">
+  <img src="./images/blog.png" alt="QR code for thibauldc.dev" style="display: block; height: 18rem; margin: 0 auto;" />
+  <div style="font-size: 1.5rem;"><a href="https://thibauldc.dev">https://thibauldc.dev</a></div>
+</div>
+
+---
 class: emfcc-end
 ---
 
