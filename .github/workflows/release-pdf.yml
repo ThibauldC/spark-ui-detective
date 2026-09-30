@@ -21,11 +21,11 @@ jobs:
       - run: npm ci
         working-directory: slidev
       - name: Export PDF with EMFCC26 backgrounds
-        run: npm run export -- --range "1-22,24-25,27-29,30-31,33" --format pdf --output spark-ui-detective-emfcc26.pdf --per-slide
+        run: npm run export -- --range "1-22,24-25,27-28,30-31,33-34" --format pdf --output spark-ui-detective-emfcc26.pdf --per-slide
         working-directory: slidev
       - run: test -s slidev/spark-ui-detective-emfcc26.pdf
       - name: Export PDF without backgrounds
-        run: npm run export -- --range "2-22,24-25,27-29,30-31" --format pdf --output spark-ui-detective.pdf --per-slide
+        run: npm run export -- --range "2-22,24-25,27-28,30-31,33" --format pdf --output spark-ui-detective.pdf --per-slide
         working-directory: slidev
         env:
           VITE_NO_BG: "1"
